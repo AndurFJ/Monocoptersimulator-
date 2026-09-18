@@ -31,6 +31,33 @@ export const RAIL_SEPARATION_M = 0.15;
 /** Recorrido útil del carro sobre las varillas [m] — TODO: confirmar */
 export const RAIL_TRAVEL_M = 0.75;
 
+// ── Zonas de operación (dato del banco real, en fracción del recorrido) ──
+
+/** 0–10 %: zona muerta. El carro descansa sobre los resortes y no se puede controlar */
+export const DEAD_ZONE_FRACTION = 0.10;
+
+/** 85–100 %: zona inestable. Cerca del travesaño superior el carro no se mantiene */
+export const UNSTABLE_ZONE_FRACTION = 0.85;
+
+/** Techo de la zona muerta [m] */
+export const DEAD_ZONE_TOP_M = DEAD_ZONE_FRACTION * RAIL_TRAVEL_M;
+
+/** Inicio de la zona inestable [m] */
+export const UNSTABLE_ZONE_START_M = UNSTABLE_ZONE_FRACTION * RAIL_TRAVEL_M;
+
+/**
+ * Efecto techo: al acercarse al travesaño superior la hélice empuja más.
+ * Ganancia extra de empuje en el tope: F = F₀ · (1 + G·s²), s ∈ [0,1] a lo
+ * largo de la zona inestable. Crece con la altura → desestabiliza. — TODO: calibrar
+ */
+export const CEILING_THRUST_GAIN = 1.2;
+
+/** Fuerza de turbulencia (desviación típica) en el tope de la zona inestable [N] — TODO: calibrar */
+export const CEILING_TURBULENCE_N = 0.8;
+
+/** Constante de tiempo de la turbulencia (ruido filtrado) [s] */
+export const TURBULENCE_TIME_CONSTANT_S = 0.08;
+
 // ── Masa y dinámica ──────────────────────────────────────────────
 
 /** Masa total del carro (plataforma + motor + ESC + sensores) [kg] — TODO: confirmar */
@@ -48,13 +75,22 @@ export const DAMPING_COEFFICIENT = 0.5;
 /** Fricción estática/coulomb del riel [N] — TODO: confirmar */
 export const RAIL_FRICTION_N = 0.05;
 
+/**
+ * Constante de tiempo del conjunto ESC + motor [s]: el empuje no cambia al
+ * instante, sigue al comando con un retardo de primer orden — TODO: medir
+ */
+export const MOTOR_TIME_CONSTANT_S = 0.08;
+
 // ── Resortes ─────────────────────────────────────────────────────
 
 /** Rigidez efectiva de los resortes [N/m] — TODO: confirmar (o medir: "se comprime X cm con Y kg") */
 export const SPRING_STIFFNESS = 500.0;
 
-/** Altura mínima del carro donde los resortes empiezan a comprimirse [m] */
-export const SPRING_ENGAGE_HEIGHT_M = 0.05;
+/**
+ * Altura donde los resortes empiezan a comprimirse [m]. Coincide con el techo
+ * de la zona muerta: por debajo el carro está apoyado y no responde al control.
+ */
+export const SPRING_ENGAGE_HEIGHT_M = DEAD_ZONE_TOP_M;
 
 /** Longitud natural (no comprimida) de los resortes [m] */
 export const SPRING_NATURAL_LENGTH_M = 0.08;

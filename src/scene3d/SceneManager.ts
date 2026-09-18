@@ -13,11 +13,34 @@ import * as THREE from 'three';
 import { RigBuilder } from './RigBuilder';
 import type { RigParts } from './RigBuilder';
 import { CameraRig } from './CameraRig';
-import { matFloor } from './materials';
+import { matFloor, matPropeller, matPropellerBlur } from './materials';
 import {
-  WOOD_THICKNESS_M, SPRING_NATURAL_LENGTH_M,
-  H_MAX, PWM_MIN, PWM_MAX,
+  SPRING_NATURAL_LENGTH_M, SPRING_ENGAGE_HEIGHT_M, MOTOR_TIME_CONSTANT_S,
+  H_MIN, H_MAX,
 } from '../physics/constants';
+import { normalizePwm } from '../physics/MonocopterModel';
+import { SPRING_BASE_Y, CARRIAGE_BOTTOM_OFFSET, carriageYForHeight } from './geometry';
+
+/** Mitad del alto de las tapas de goma de los resortes */
+const SPRING_CAP_HALF = 0.007;
+
+/** Constante de tiempo del suavizado visual del carro [s] */
+const SMOOTHING_TAU = 0.03;
+
+/**
+ * Velocidad de giro que se dibuja [rad/s]. Un brushless real gira a miles de
+ * RPM, imposible de mostrar a 60 fps (aliasing); por encima de esto se
+ * desvanecen las palas y aparece el disco de barrido.
+ */
+const MAX_VISUAL_SPIN = 32;
+
+/** Amplitud máxima de la vibración del carro a plena potencia [m] */
+const VIBRATION_AMPLITUDE = 0.0006;
+
+function smoothstep(edge0: number, edge1: number, x: number): number {
+  const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
 
 export class SceneManager {
   private renderer: THREE.WebGLRenderer;
@@ -27,12 +50,15 @@ export class SceneManager {
   private resizeObserver: ResizeObserver;
   private animFrameId = 0;
   private running = false;
+  private readonly clock = new THREE.Timer();
 
-  // Posición base del carro (Y cuando height=0)
-  private readonly carriageBaseY: number;
-
-  // Velocidad angular máxima de la hélice (rad/s) a PWM máximo
-  private readonly maxAngularSpeed = 120; // ~1146 RPM visual (suficiente para verse rápido)
+  // Último estado recibido y estado mostrado (suavizado)
+  private targetHeight = SPRING_ENGAGE_HEIGHT_M;
+  private targetPwm = 0;
+  private shownHeight = SPRING_ENGAGE_HEIGHT_M;
+  /** Velocidad del rotor mostrada ∈ [0,1] (sigue al PWM con la inercia del motor) */
+  private rotorSpeed = 0;
+  private setpointShown: number | null = null;
 
   constructor(container: HTMLElement) {
     // ── Renderer ──────────────────────────────────────────────
@@ -42,7 +68,7 @@ export class SceneManager {
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.2;
     this.renderer.setClearColor(0x12141a);
@@ -74,8 +100,7 @@ export class SceneManager {
     // ── Cámara ────────────────────────────────────────────────
     this.cameraRig = new CameraRig(this.renderer.domElement, w, h);
 
-    // Calcular posición base del carro
-    this.carriageBaseY = 0.02 + WOOD_THICKNESS_M + SPRING_NATURAL_LENGTH_M + 0.01;
+    this.update(this.shownHeight, 0, 0);
 
     // ── ResizeObserver ─────────────────────────────────────────
     this.resizeObserver = new ResizeObserver((entries) => {
@@ -137,26 +162,74 @@ export class SceneManager {
 
   // ── API pública ─────────────────────────────────────────────────
 
-  /** Actualizar posición del carro y velocidad de la hélice */
-  update(height: number, pwm: number, dt: number): void {
-    // Mover el carro según la altura (mapear height → posición Y en la escena)
-    const targetY = this.carriageBaseY + Math.max(0, Math.min(height, H_MAX));
-    this.rigParts.carriage.position.y = targetY;
-
-    // Rotar la hélice según el PWM
-    const normalizedPwm = Math.max(0, Math.min(1, (pwm - PWM_MIN) / (PWM_MAX - PWM_MIN)));
-    const angularSpeed = normalizedPwm * this.maxAngularSpeed;
-    this.rigParts.propeller.rotation.y += angularSpeed * dt;
-
-    // Comprimir visualmente los resortes cuando el carro está cerca del fondo
-    this.updateSprings(height);
+  /** Registrar la última telemetría; el loop de render la aplica suavizada */
+  setTelemetry(height: number, pwm: number, setpoint?: number): void {
+    this.targetHeight = height;
+    this.targetPwm = pwm;
+    this.setSetpoint(setpoint ?? null);
   }
 
-  /** Actualizar compresión visual de los resortes */
-  private updateSprings(height: number): void {
-    const compressionFactor = Math.max(0.3, Math.min(1, height / 0.08 + 0.3));
-    this.rigParts.springs.left.scale.y = compressionFactor;
-    this.rigParts.springs.right.scale.y = compressionFactor;
+  /** Mostrar (o esconder con null) el marcador de altura objetivo */
+  setSetpoint(setpoint: number | null): void {
+    const sp = setpoint === null ? null : Math.max(H_MIN, Math.min(setpoint, H_MAX));
+    if (sp === this.setpointShown) return;
+    this.setpointShown = sp;
+    const { setpointMarker, setSetpointLabel } = this.rigParts;
+    setpointMarker.visible = sp !== null;
+    if (sp === null) return;
+    setpointMarker.position.y = carriageYForHeight(sp);
+    setSetpointLabel(`${(sp * 100).toFixed(1)} cm`);
+  }
+
+  /** Mover el carro a una altura sin suavizado (p.ej. tras un reset) */
+  snapTo(height: number, pwm = 0): void {
+    this.setTelemetry(height, pwm);
+    this.shownHeight = height;
+    this.rotorSpeed = normalizePwm(pwm);
+    this.update(height, pwm, 0);
+  }
+
+  /** Actualizar posición del carro y velocidad de la hélice */
+  update(height: number, pwm: number, dt: number): void {
+    const h = Math.max(H_MIN, Math.min(height, H_MAX));
+    const carriageY = carriageYForHeight(h);
+    const { carriage, propeller, propellerBlur } = this.rigParts;
+
+    // El rotor acelera/frena con la inercia del motor (acepta PWM en µs o 0-255)
+    if (dt > 0) {
+      const k = 1 - Math.exp(-dt / MOTOR_TIME_CONSTANT_S);
+      this.rotorSpeed += (normalizePwm(pwm) - this.rotorSpeed) * k;
+    }
+    const speed = this.rotorSpeed;
+
+    // Hélice: giro visible a baja velocidad; a alta, palas difusas + disco de barrido
+    propeller.rotation.y -= Math.min(speed * 400, MAX_VISUAL_SPIN) * dt;
+    const blur = smoothstep(0.05, 0.35, speed);
+    matPropeller.opacity = 1 - 0.8 * blur;
+    matPropeller.depthWrite = blur < 0.5;
+    matPropellerBlur.opacity = 0.45 * blur;
+    propellerBlur.visible = blur > 0.01;
+
+    // Vibración del motor transmitida al carro
+    const amp = VIBRATION_AMPLITUDE * speed;
+    carriage.position.set((Math.random() - 0.5) * amp, carriageY + (Math.random() - 0.5) * amp, (Math.random() - 0.5) * amp);
+    carriage.rotation.z = (Math.random() - 0.5) * amp * 2;
+
+    // Comprimir visualmente los resortes cuando el carro baja de su punto de contacto
+    this.updateSprings(carriageY - CARRIAGE_BOTTOM_OFFSET);
+  }
+
+  /** Los resortes van del travesaño hasta el carro (o su longitud natural si no hay contacto) */
+  private updateSprings(carriageBottomY: number): void {
+    const length = Math.max(0.2 * SPRING_NATURAL_LENGTH_M, Math.min(SPRING_NATURAL_LENGTH_M, carriageBottomY - SPRING_BASE_Y));
+    const { springs, springCaps } = this.rigParts;
+    for (const spring of [springs.left, springs.right]) {
+      spring.scale.y = length / SPRING_NATURAL_LENGTH_M;
+      spring.position.y = SPRING_BASE_Y + length / 2;
+    }
+    for (const cap of [springCaps.left, springCaps.right]) {
+      cap.position.y = SPRING_BASE_Y + length - SPRING_CAP_HALF;
+    }
   }
 
   /** Arrancar el loop de render */
@@ -170,6 +243,14 @@ export class SceneManager {
   private loop = (): void => {
     if (!this.running) return;
     this.animFrameId = requestAnimationFrame(this.loop);
+    this.clock.update();
+    const dt = Math.min(this.clock.getDelta(), 0.1);
+
+    // Suavizado exponencial: la física va a 50 Hz y el monitor a 60+ Hz
+    const alpha = 1 - Math.exp(-dt / SMOOTHING_TAU);
+    this.shownHeight += (this.targetHeight - this.shownHeight) * alpha;
+    this.update(this.shownHeight, this.targetPwm, dt);
+
     this.cameraRig.update();
     this.renderer.render(this.scene, this.cameraRig.camera);
   };

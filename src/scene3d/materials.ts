@@ -59,6 +59,17 @@ export const matPropeller = new THREE.MeshStandardMaterial({
   roughness: 0.4,
   metalness: 0.1,
   side: THREE.DoubleSide,
+  // Se desvanece a alta velocidad para dar paso al disco de barrido
+  transparent: true,
+});
+
+/** Disco de barrido de la hélice a alta velocidad (motion blur) */
+export const matPropellerBlur = new THREE.MeshBasicMaterial({
+  color: 0xff7744,
+  transparent: true,
+  opacity: 0,
+  depthWrite: false,
+  side: THREE.DoubleSide,
 });
 
 /** Material campana del motor — plateado/dorado */
@@ -129,3 +140,28 @@ export const matRubber = new THREE.MeshStandardMaterial({
   roughness: 0.95,
   metalness: 0.0,
 });
+
+/** Marcador de la altura objetivo (ámbar, siempre visible) */
+export const matSetpoint = new THREE.MeshBasicMaterial({
+  color: 0xfbbf24,
+  transparent: true,
+  opacity: 0.9,
+  depthTest: false,
+});
+
+/** Plano translúcido del marcador de altura objetivo */
+export const matSetpointPlane = new THREE.MeshBasicMaterial({
+  color: 0xfbbf24,
+  transparent: true,
+  opacity: 0.08,
+  depthWrite: false,
+  side: THREE.DoubleSide,
+});
+
+/** Marcas de la regla de altura */
+export const matRuler = new THREE.MeshBasicMaterial({ color: 0xf2f2f2 });
+
+/** Franjas de zonas de operación junto a la regla */
+export const matZoneDead = new THREE.MeshBasicMaterial({ color: 0x9498a8 });
+export const matZoneSpan = new THREE.MeshBasicMaterial({ color: 0x34d399 });
+export const matZoneUnstable = new THREE.MeshBasicMaterial({ color: 0xf87171 });
