@@ -12,6 +12,8 @@
  *     ├── Sensors (2 ultrasónicos)
  *     ├── PCB (placa controladora)
  *     ├── Battery (LiPo)
+ *     ├── Ruler (regla en cm sobre el poste izquierdo)
+ *     ├── SetpointMarker (línea ámbar a la altura objetivo)
  *     └── Carriage (grupo móvil en Y)
  *           ├── Platform (tabla)
  *           ├── Bushings (bujes lineales)
@@ -19,7 +21,8 @@
  *           └── MotorAssembly (grupo que rota)
  *                 ├── MotorBody
  *                 ├── MotorBell
- *                 └── Propeller (2 palas)
+ *                 ├── Propeller (2 palas)
+ *                 └── PropellerBlur (disco de barrido)
  */
 
 import * as THREE from 'three';
@@ -28,11 +31,18 @@ import {
   matMotorBody, matPropeller, matMotorBell,
   matESC, matPCB, matBattery, matRubber,
   matCableRed, matCableBlack, matCableBlue,
+  matPropellerBlur, matSetpoint, matSetpointPlane, matRuler,
+  matZoneDead, matZoneSpan, matZoneUnstable,
 } from './materials';
 import {
   FRAME_HEIGHT_M, FRAME_WIDTH_M, WOOD_THICKNESS_M, FRAME_DEPTH_M,
-  RAIL_DIAMETER_M, RAIL_SEPARATION_M, SPRING_NATURAL_LENGTH_M,
+  RAIL_DIAMETER_M, RAIL_SEPARATION_M, SPRING_NATURAL_LENGTH_M, H_MAX,
+  DEAD_ZONE_TOP_M, UNSTABLE_ZONE_START_M,
 } from '../physics/constants';
+import { carriageYForHeight } from './geometry';
+
+/** Longitud de cada pala de la hélice [m] */
+const BLADE_LENGTH = 0.065;
 
 /** Resultado del builder: grupo raíz + referencias a las partes móviles */
 export interface RigParts {
@@ -40,6 +50,14 @@ export interface RigParts {
   carriage: THREE.Group;
   propeller: THREE.Group;
   springs: { left: THREE.Mesh; right: THREE.Mesh };
+  /** Tapas superiores de los resortes (siguen al extremo comprimido) */
+  springCaps: { left: THREE.Mesh; right: THREE.Mesh };
+  /** Disco de barrido de la hélice (visible a alta velocidad) */
+  propellerBlur: THREE.Mesh;
+  /** Marcador de altura objetivo; su origen está en Y = 0 de la escena */
+  setpointMarker: THREE.Group;
+  /** Actualiza el texto de la etiqueta del marcador */
+  setSetpointLabel: (text: string) => void;
 }
 
 export class RigBuilder {
@@ -61,7 +79,7 @@ export class RigBuilder {
     rig.add(rails);
 
     // ── Resortes ────────────────────────────────────────────────
-    const { group: springsGroup, leftSpring, rightSpring } = this.buildSprings();
+    const { group: springsGroup, leftSpring, rightSpring, capLTop, capRTop } = this.buildSprings();
     rig.add(springsGroup);
 
     // ── Sensores ultrasónicos ───────────────────────────────────
@@ -77,8 +95,13 @@ export class RigBuilder {
     rig.add(battery);
 
     // ── Carro (grupo móvil) ─────────────────────────────────────
-    const { carriageGroup, propellerGroup } = this.buildCarriage();
+    const { carriageGroup, propellerGroup, propellerBlur } = this.buildCarriage();
     rig.add(carriageGroup);
+
+    // ── Regla y marcador de altura objetivo ─────────────────────
+    rig.add(this.buildRuler());
+    const { marker: setpointMarker, setLabel } = this.buildSetpointMarker();
+    rig.add(setpointMarker);
 
     // ── Cables decorativos ──────────────────────────────────────
     const cables = this.buildCables(carriageGroup.position.y);
@@ -92,6 +115,10 @@ export class RigBuilder {
       carriage: carriageGroup,
       propeller: propellerGroup,
       springs: { left: leftSpring, right: rightSpring },
+      springCaps: { left: capLTop, right: capRTop },
+      propellerBlur,
+      setpointMarker,
+      setSetpointLabel: setLabel,
     };
   }
 
@@ -180,7 +207,9 @@ export class RigBuilder {
     return group;
   }
 
-  private buildSprings(): { group: THREE.Group; leftSpring: THREE.Mesh; rightSpring: THREE.Mesh } {
+  private buildSprings(): {
+    group: THREE.Group; leftSpring: THREE.Mesh; rightSpring: THREE.Mesh; capLTop: THREE.Mesh; capRTop: THREE.Mesh;
+  } {
     const group = new THREE.Group();
     group.name = 'springs';
 
@@ -213,7 +242,7 @@ export class RigBuilder {
     capRTop.position.set(RAIL_SEPARATION_M / 2, 0.02 + WOOD_THICKNESS_M + SPRING_NATURAL_LENGTH_M - 0.007, 0);
     group.add(capRTop);
 
-    return { group, leftSpring, rightSpring };
+    return { group, leftSpring, rightSpring, capLTop, capRTop };
   }
 
   /** Genera un resorte helicoidal usando TubeGeometry sobre una curva paramétrica */
@@ -316,7 +345,7 @@ export class RigBuilder {
     return group;
   }
 
-  private buildCarriage(): { carriageGroup: THREE.Group; propellerGroup: THREE.Group } {
+  private buildCarriage(): { carriageGroup: THREE.Group; propellerGroup: THREE.Group; propellerBlur: THREE.Mesh } {
     const carriageGroup = new THREE.Group();
     carriageGroup.name = 'carriage';
 
@@ -382,7 +411,7 @@ export class RigBuilder {
     propellerGroup.add(shaft);
 
     // Hélice bipala — 2 palas naranjas
-    const bladeLength = 0.065;
+    const bladeLength = BLADE_LENGTH;
     const bladeWidth = 0.015;
     const bladeThickness = 0.003;
     const bladeGeo = new THREE.BoxGeometry(bladeLength, bladeThickness, bladeWidth);
@@ -413,6 +442,14 @@ export class RigBuilder {
     spinner.position.set(0, 0.052, 0);
     propellerGroup.add(spinner);
 
+    // Disco de barrido: a miles de RPM el ojo no ve palas, ve un disco
+    const blurGeo = new THREE.RingGeometry(0.008, BLADE_LENGTH + 0.004, 48);
+    const propellerBlur = new THREE.Mesh(blurGeo, matPropellerBlur);
+    propellerBlur.rotation.x = -Math.PI / 2;
+    propellerBlur.position.set(0, 0.045, 0);
+    propellerBlur.visible = false;
+    propellerGroup.add(propellerBlur);
+
     carriageGroup.add(propellerGroup);
 
     // ── Cables del carro al ESC/motor ────────────────────────
@@ -428,7 +465,90 @@ export class RigBuilder {
     cable2.rotation.z = -0.5;
     carriageGroup.add(cable2);
 
-    return { carriageGroup, propellerGroup };
+    return { carriageGroup, propellerGroup, propellerBlur };
+  }
+
+  /** Regla graduada en cm sobre la cara frontal del poste izquierdo */
+  private buildRuler(): THREE.Group {
+    const group = new THREE.Group();
+    group.name = 'ruler';
+
+    const postInnerX = -FRAME_WIDTH_M / 2 + WOOD_THICKNESS_M;
+    const z = FRAME_DEPTH_M / 2 + 0.0006;
+    const maxCm = Math.floor(H_MAX * 100);
+
+    for (let cm = 0; cm <= maxCm; cm += 5) {
+      const major = cm % 10 === 0;
+      const len = major ? 0.018 : 0.010;
+      const tick = new THREE.Mesh(new THREE.BoxGeometry(len, 0.0015, 0.001), matRuler);
+      tick.position.set(postInnerX - len / 2, carriageYForHeight(cm / 100), z);
+      group.add(tick);
+
+      if (major) {
+        const label = makeTextSprite(String(cm), 0.016, '#f2f2f2');
+        label.position.set(postInnerX - 0.029, carriageYForHeight(cm / 100), z + 0.002);
+        group.add(label);
+      }
+    }
+
+    // Franja de zonas de operación a lo largo de la regla
+    const zoneBar = (from: number, to: number, mat: THREE.Material) => {
+      const y0 = carriageYForHeight(from);
+      const y1 = carriageYForHeight(to);
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(0.004, y1 - y0, 0.001), mat);
+      bar.position.set(postInnerX - 0.0025, (y0 + y1) / 2, z + 0.0004);
+      group.add(bar);
+    };
+    zoneBar(0, DEAD_ZONE_TOP_M, matZoneDead);
+    zoneBar(DEAD_ZONE_TOP_M, UNSTABLE_ZONE_START_M, matZoneSpan);
+    zoneBar(UNSTABLE_ZONE_START_M, H_MAX, matZoneUnstable);
+
+    const unit = makeTextSprite('cm', 0.014, '#f2f2f2');
+    unit.position.set(postInnerX - 0.02, carriageYForHeight(H_MAX) + 0.035, z + 0.002);
+    group.add(unit);
+    return group;
+  }
+
+  /** Línea ámbar entre los postes que marca la altura objetivo */
+  private buildSetpointMarker(): { marker: THREE.Group; setLabel: (text: string) => void } {
+    const marker = new THREE.Group();
+    marker.name = 'setpoint-marker';
+    const innerWidth = FRAME_WIDTH_M - 2 * WOOD_THICKNESS_M;
+
+    const line = new THREE.Mesh(new THREE.BoxGeometry(innerWidth, 0.0025, 0.0025), matSetpoint);
+    line.position.z = FRAME_DEPTH_M / 2 + 0.002;
+    line.renderOrder = 10;
+    marker.add(line);
+
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(innerWidth, 0.12), matSetpointPlane);
+    plane.rotation.x = -Math.PI / 2;
+    marker.add(plane);
+
+    // Flecha en el poste derecho apuntando hacia la línea
+    const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.008, 0.018, 3), matSetpoint);
+    arrow.rotation.z = Math.PI / 2;
+    arrow.position.set(innerWidth / 2 + 0.012, 0, FRAME_DEPTH_M / 2 + 0.004);
+    arrow.renderOrder = 10;
+    marker.add(arrow);
+
+    let label = makeTextSprite('', 0.02, '#fbbf24', true);
+    const placeLabel = () => {
+      label.position.set(innerWidth / 2 + 0.07, 0.0, FRAME_DEPTH_M / 2 + 0.004);
+      label.renderOrder = 11;
+    };
+    placeLabel();
+    marker.add(label);
+
+    const setLabel = (text: string) => {
+      marker.remove(label);
+      disposeSprite(label);
+      label = makeTextSprite(text, 0.02, '#fbbf24', true);
+      placeLabel();
+      marker.add(label);
+    };
+
+    marker.visible = false;
+    return { marker, setLabel };
   }
 
   /** Cables decorativos que van del carro hacia la base */
@@ -452,4 +572,31 @@ export class RigBuilder {
 
     return group;
   }
+}
+
+/** Sprite con texto dibujado en un canvas; `height` en metros */
+function makeTextSprite(text: string, height: number, color: string, onTop = false): THREE.Sprite {
+  const fontPx = 64;
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d')!;
+  const font = `600 ${fontPx}px "JetBrains Mono", monospace`;
+  ctx.font = font;
+  canvas.width = Math.max(1, Math.ceil(ctx.measureText(text).width) + 16);
+  canvas.height = fontPx + 16;
+  ctx.font = font;
+  ctx.fillStyle = color;
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center';
+  ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: !onTop }));
+  sprite.scale.set(height * (canvas.width / canvas.height), height, 1);
+  return sprite;
+}
+
+function disposeSprite(sprite: THREE.Sprite): void {
+  sprite.material.map?.dispose();
+  sprite.material.dispose();
 }
