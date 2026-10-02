@@ -1,0 +1,1125 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Monóptero Hito 2</title>
+<link rel="stylesheet" href="lib/fonts.css">
+<style>
+/* Layout: lámina 16:9 de 1600×900 escalada sobre el banco 3D que gira de fondo;
+   el panel de cada lámina va a la izquierda y el banco queda visible a la derecha. */
+:root {
+  --paper: #eceee9;        /* pared blanca del laboratorio */
+  --paper-deep: #dfe2db;
+  --grid: rgba(22, 25, 29, 0.045);
+  --panel: rgba(249, 250, 247, 0.9);
+  --ink: #16191d;          /* marco pintado de negro */
+  --ink-2: #454c54;
+  --steel: #8b939b;        /* varillas de acero */
+  --rule: #cfd3cb;
+  --prop: #e4572e;         /* hélice naranja */
+  --prop-ink: #b23c16;     /* naranja legible sobre papel */
+  --signal: #2457c5;       /* altura filtrada (azul de MATLAB) */
+  --model: #c62828;        /* modelo FOPDT (rojo de MATLAB) */
+  --ok: #2c7a4b;
+  --ok-bg: rgba(44, 122, 75, 0.1);
+  --warn: #9a6416;
+  --warn-bg: rgba(186, 128, 30, 0.12);
+  --display: "Barlow Condensed", "Arial Narrow", "Segoe UI", sans-serif;
+  --body: "Barlow", "Segoe UI", Arial, sans-serif;
+  --mono: "JetBrains Mono", Consolas, "Courier New", monospace;
+  --math: "Cambria Math", "STIX Two Math", "Latin Modern Math", math;
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--paper);
+  background-image:
+    radial-gradient(ellipse at 78% 40%, rgba(255, 255, 255, 0.75), transparent 60%),
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: auto, 32px 32px, 32px 32px;
+  color: var(--ink);
+  font-family: var(--body);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+#bg3d { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* ---------- escenario ---------- */
+#stage { position: fixed; left: 0; top: 0; width: 1600px; height: 900px; transform-origin: 0 0; }
+.slide {
+  position: absolute; inset: 0; font-size: 24px;
+  opacity: 0; visibility: hidden; transform: translateY(10px);
+  transition: opacity .45s ease, transform .45s ease, visibility 0s linear .45s;
+}
+.slide.is-active { opacity: 1; visibility: visible; transform: none; transition: opacity .45s ease, transform .45s ease; }
+
+.panel {
+  position: absolute; left: 56px; top: 40px; bottom: 100px; width: 1084px;
+  padding: 1.25em 1.6em 1.3em;
+  display: flex; flex-direction: column; gap: .85em;
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  backdrop-filter: blur(8px) saturate(1.05);
+  -webkit-backdrop-filter: blur(8px) saturate(1.05);
+  box-shadow: 0 24px 60px -36px rgba(22, 25, 29, 0.55);
+  min-height: 0;
+}
+.head { display: flex; flex-direction: column; gap: .28em; }
+.kicker {
+  font: 500 .6em/1 var(--mono); letter-spacing: .16em; text-transform: uppercase;
+  color: var(--prop-ink); display: flex; gap: .9em; align-items: center;
+}
+.kicker::after { content: ""; flex: 0 0 64px; height: 1px; background: currentColor; opacity: .5; }
+h1, h2 { font-family: var(--display); margin: 0; text-wrap: balance; color: var(--ink); }
+h2 { font-weight: 600; font-size: 2.15em; line-height: 1; letter-spacing: -.005em; }
+h3 { font: 600 .72em/1.2 var(--mono); letter-spacing: .02em; color: var(--ink-2); margin: 0; }
+.sym { text-transform: none; letter-spacing: 0; }
+p { margin: 0; font-size: .86em; line-height: 1.42; max-width: 62ch; }
+ul, ol { margin: 0; padding-left: 1.1em; font-size: .86em; line-height: 1.38; display: flex; flex-direction: column; gap: .38em; }
+li::marker { color: var(--prop-ink); }
+b, strong { font-weight: 600; }
+.mono { font-family: var(--mono); }
+.num { font-variant-numeric: tabular-nums; }
+.muted { color: var(--ink-2); }
+.small { font-size: .7em; }
+
+.body { flex: 1; min-height: 0; display: grid; gap: 1.1em; }
+.cols { display: grid; gap: 1.2em; min-height: 0; align-items: start; align-content: start; }
+.cols > * { min-width: 0; min-height: 0; }
+.stack { display: flex; flex-direction: column; gap: .75em; min-width: 0; }
+
+figure { margin: 0; display: flex; flex-direction: column; gap: .3em; min-width: 0; }
+figure img { display: block; width: 100%; height: auto; background: #fff; border: 1px solid var(--rule); }
+figcaption { font: .58em/1.35 var(--mono); color: var(--ink-2); }
+
+math { font-family: var(--math); }
+.eq { font-size: 1.05em; padding: .4em .7em; background: rgba(255, 255, 255, .7); border: 1px solid var(--rule); }
+.eq math { display: block; }
+
+table { border-collapse: collapse; width: 100%; font-size: .72em; font-variant-numeric: tabular-nums; }
+th {
+  text-align: left; font: 600 .82em/1.2 var(--mono); letter-spacing: .02em;
+  color: var(--ink-2); border-bottom: 2px solid var(--ink); padding: .4em .5em;
+}
+td { padding: .34em .5em; border-bottom: 1px solid var(--rule); vertical-align: baseline; }
+td.r, th.r { text-align: right; }
+td.v { font-family: var(--mono); text-align: right; white-space: nowrap; }
+.ensayos td:first-child, .res td:first-child { white-space: nowrap; }
+tr.ok td { background: var(--ok-bg); font-weight: 600; }
+tr.ok td.v { color: var(--ok); }
+tr.bad td.v.fit { color: var(--warn); }
+
+.readouts { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--rule); }
+.readout { padding: .45em .7em .5em; display: flex; flex-direction: column; gap: .12em; min-width: 0; }
+.readout + .readout { border-left: 1px solid var(--rule); }
+.readout .k { font: 500 .54em/1.2 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2); }
+.readout .val { font: 600 1.45em/1 var(--display); font-variant-numeric: tabular-nums; }
+.readout .val small { font: 500 .42em var(--mono); color: var(--ink-2); margin-left: .25em; }
+.readout.good .val { color: var(--ok); }
+
+.note { font-size: .78em; line-height: 1.4; padding: .6em .8em; background: rgba(255, 255, 255, .65); border: 1px solid var(--rule); }
+.note.warn { background: var(--warn-bg); border-color: rgba(154, 100, 22, .35); }
+.note.good { background: var(--ok-bg); border-color: rgba(44, 122, 75, .35); }
+.note b { color: var(--ink); }
+
+/* ---------- gráficas SVG ---------- */
+svg.chart { display: block; width: 100%; height: auto; overflow: visible; }
+.chart .grid line { stroke: var(--rule); stroke-width: 1; }
+.chart .axis { stroke: var(--ink); stroke-width: 1.4; fill: none; }
+.chart text { font-family: var(--mono); fill: var(--ink-2); font-size: 13px; }
+.chart .lbl { fill: var(--ink); font-size: 14px; }
+.chart .raw { fill: var(--steel); opacity: .75; }
+.chart .filt { stroke: var(--signal); stroke-width: 2.4; fill: none; stroke-linejoin: round; }
+.chart .mod { stroke: var(--model); stroke-width: 2.6; fill: none; stroke-dasharray: 9 6; }
+.chart .uline { stroke: var(--ink); stroke-width: 2.2; fill: none; }
+.chart .guide { stroke: var(--ink-2); stroke-width: 1.2; stroke-dasharray: 3 4; fill: none; }
+.chart .mark { fill: var(--prop); stroke: var(--ink); stroke-width: 1.4; }
+.chart .accent { fill: var(--prop-ink); }
+.chart .bracket { stroke: var(--prop-ink); stroke-width: 1.8; fill: none; }
+.chart .band { fill: var(--prop); opacity: .1; }
+.chart .zone { fill: var(--ink); opacity: .05; }
+.legend { display: flex; flex-wrap: wrap; gap: .3em 1.2em; font: .56em/1.2 var(--mono); color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: .45em; }
+.legend i { display: inline-block; width: 22px; height: 0; border-top: 2.5px solid; }
+.legend i.dot { width: 7px; height: 7px; border: 0; border-radius: 50%; background: var(--steel); }
+
+/* ---------- portada ---------- */
+.cover { position: absolute; left: 72px; top: 70px; width: 1010px; display: flex; flex-direction: column; gap: 1.05em; }
+.cover h1 { font-weight: 700; font-size: 3.55em; line-height: .96; letter-spacing: -.01em; }
+.cover .sub { font-size: 1.02em; line-height: 1.35; color: var(--ink-2); max-width: 40ch; }
+.cover .eq { font-size: 1.5em; background: var(--panel); align-self: flex-start; padding: .35em .75em; }
+.cover .readouts { background: var(--panel); }
+.cover .credits { display: flex; flex-direction: column; gap: .25em; font-size: .8em; color: var(--ink-2); }
+.cover .credits b { color: var(--ink); }
+
+/* ---------- línea de tiempo del protocolo ---------- */
+.steps { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; font-size: .8em; }
+.steps li { padding: .55em .8em .6em; border-top: 3px solid var(--ink); display: flex; flex-direction: column; gap: .25em; }
+.steps li + li { border-left: 1px solid var(--rule); }
+.steps li.on { border-top-color: var(--prop); }
+.steps .n { font: 600 .78em var(--mono); color: var(--prop-ink); letter-spacing: .08em; }
+.steps .t { font: 600 1.25em/1.05 var(--display); }
+
+/* ---------- pasos de cálculo ---------- */
+.calc { list-style: none; padding: 0; gap: 0; font-size: .82em; }
+.calc li { display: grid; grid-template-columns: 2.4em 1fr; gap: .6em; align-items: baseline; padding: .32em 0; border-bottom: 1px dashed var(--rule); }
+.calc .s { font: 600 .9em var(--mono); color: var(--prop-ink); }
+.calc .m { font-family: var(--mono); font-size: .86em; }
+.calc .m b { color: var(--ink); background: rgba(228, 87, 46, .12); padding: 0 .2em; }
+
+/* ---------- código ---------- */
+pre.code {
+  margin: 0; font: .6em/1.5 var(--mono); background: #1b1e22; color: #e6e6e1;
+  padding: .9em 1.1em; overflow-x: auto; border-radius: 2px; tab-size: 4;
+}
+pre.code .c { color: #8fbf7f; }
+pre.code .k { color: #7fb4ff; }
+pre.code .s { color: #e8b26a; }
+pre.code .n { color: #f08d6c; }
+.flow { list-style: none; padding: 0; display: flex; flex-direction: row; flex-wrap: wrap; gap: .35em; font-size: .62em; }
+.flow li { font-family: var(--mono); padding: .3em .6em; border: 1px solid var(--ink); background: rgba(255,255,255,.7); position: relative; }
+.flow li + li::before { content: "→"; position: absolute; left: -.95em; color: var(--ink-2); }
+.flow li + li { margin-left: .55em; }
+.scripts { font-size: .76em; }
+.scripts td:first-child { font-family: var(--mono); font-weight: 500; white-space: nowrap; }
+
+/* ---------- navegación y lectura en vivo ---------- */
+#nav { position: absolute; left: 56px; bottom: 30px; width: 1084px; height: 44px; display: flex; align-items: center; gap: 14px; font-size: 16px; }
+#nav .btn {
+  font: 500 15px var(--mono); color: var(--ink); background: var(--panel); border: 1px solid var(--ink);
+  height: 36px; min-width: 40px; padding: 0 12px; cursor: pointer; border-radius: 2px;
+}
+#nav .btn:hover { background: var(--ink); color: var(--paper); }
+#nav .btn:focus-visible, .tick:focus-visible { outline: 2px solid var(--prop); outline-offset: 2px; }
+#ticks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: row; gap: 6px; flex: 1; font-size: 16px; }
+#ticks li { flex: 1; display: flex; }
+.tick { flex: 1; height: 22px; padding: 0; border: 0; background: transparent; cursor: pointer; position: relative; }
+.tick::before { content: ""; position: absolute; left: 0; right: 0; top: 9px; height: 4px; background: var(--steel); opacity: .45; }
+.tick.done::before { background: var(--ink); opacity: .7; }
+.tick.on::before { background: var(--prop); opacity: 1; height: 6px; top: 8px; }
+#count { font: 500 15px var(--mono); min-width: 64px; text-align: center; font-variant-numeric: tabular-nums; }
+#hud {
+  position: absolute; right: 40px; bottom: 30px; width: 400px; height: 44px;
+  display: grid; grid-template-columns: auto auto auto 1fr; align-items: center; gap: 14px;
+  padding: 0 14px; font: 13px/1.1 var(--mono); color: var(--ink-2);
+  background: var(--panel); border: 1px solid var(--rule); border-radius: 2px;
+}
+#hud b { color: var(--ink); font-weight: 600; font-size: 15px; font-variant-numeric: tabular-nums; }
+#hud .tag { text-transform: uppercase; letter-spacing: .1em; font-size: 11px; color: var(--prop-ink); }
+#hud .fase { text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- celulares: láminas apiladas ---------- */
+@media (max-width: 760px) {
+  body { overflow-y: auto; }
+  #stage { position: relative; width: auto; height: auto; transform: none !important; padding: 16px 16px 90px; display: flex; flex-direction: column; gap: 16px; }
+  .slide { position: relative; inset: auto; font-size: 15px; opacity: 1; visibility: visible; transform: none; }
+  .panel, .cover { position: relative; left: auto; top: auto; bottom: auto; width: auto; }
+  .panel { padding: 18px 16px; }
+  .cover { padding: 18px 16px; background: var(--panel); border: 1px solid var(--rule); border-radius: 3px; }
+  .cover h1 { font-size: 2.6em; }
+  figure img { width: auto; max-width: 100%; max-height: 60vh; align-self: center; }
+  .cols, .body { grid-template-columns: 1fr !important; grid-template-rows: none !important; }
+  .readouts { grid-auto-flow: row; grid-template-columns: 1fr 1fr; }
+  .readout + .readout { border-left: 0; }
+  .steps { grid-template-columns: 1fr 1fr; }
+  #nav { display: none; }
+  #hud { position: fixed; left: 16px; right: 16px; bottom: 12px; width: auto; grid-template-columns: auto auto 1fr; }
+  #hud .tag { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .slide { transition: none; }
+}
+</style>
+</head>
+<body>
+<canvas id="bg3d" aria-hidden="true"></canvas>
+
+<main id="stage">
+
+  <!-- ===================== 1 · PORTADA ===================== -->
+  <section class="slide" data-title="Portada" data-frac="0.80" data-zoom="1.06">
+    <div class="cover">
+      <div class="kicker">Control Análogo · Hito 2 · Universidad del Magdalena</div>
+      <!-- Para cambiar el texto de una lámina basta con editar este archivo y recargar el navegador. -->
+      <h1>Identificación dinámica del monóptero de 1 GDL</h1>
+      <p class="sub">Curva de reacción, método Fit 3 de Smith y Corripio y validación en MATLAB y Simulink.</p>
+      <div class="eq">
+        <math><mrow><msub><mi>G</mi><mi>p</mi></msub><mo stretchy="false">(</mo><mi>s</mi><mo stretchy="false">)</mo><mo>=</mo>
+          <mfrac><mrow><mn>0.4302</mn><mspace width="0.12em"></mspace><msup><mi>e</mi><mrow><mo>−</mo><mn>0.1188</mn><mi>s</mi></mrow></msup></mrow><mrow><mn>1.5719</mn><mi>s</mi><mo>+</mo><mn>1</mn></mrow></mfrac>
+          <mspace width="0.5em"></mspace><mtext>[cm/µs]</mtext></mrow></math>
+      </div>
+      <div class="readouts">
+        <div class="readout"><span class="k">Ganancia K</span><span class="val">0.4302<small>cm/µs</small></span></div>
+        <div class="readout"><span class="k">Constante <span class="sym">τ</span></span><span class="val">1.5719<small>s</small></span></div>
+        <div class="readout"><span class="k">Tiempo muerto <span class="sym">t₀</span></span><span class="val">0.1188<small>s</small></span></div>
+        <div class="readout good"><span class="k">Ajuste Fit</span><span class="val">85.77<small>%</small></span></div>
+      </div>
+      <div class="credits">
+        <span>Docente: <b>Ing. Jordan Dallan Guillot Fula, PhD (c)</b></span>
+        <span>Integrantes: <b>Nayarit Ramirez · Andru Fonseca</b></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== 2 · BANCO ===================== -->
+  <section class="slide" data-title="Banco experimental">
+    <div class="panel">
+      <div class="head"><div class="kicker">Planta</div><h2>El banco experimental</h2></div>
+      <div class="body cols" style="grid-template-columns: 1.05fr 1fr;">
+        <div class="cols" style="grid-template-columns: 1fr 1.25fr; align-items: start;">
+          <figure><img src="img/monocoptero-real.jpg" alt="Banco original de madera con el carro, la hélice naranja y el sensor en la base"><figcaption>Montaje del ensayo (13/09)</figcaption></figure>
+          <figure><img src="img/banco_actual.jpg" alt="Banco actual pintado de negro, con la capibara de peluche sobre el travesaño"><figcaption>Banco actual (01/10)</figcaption></figure>
+        </div>
+        <div class="stack">
+          <table>
+            <thead><tr><th>Parte</th><th>Qué es</th></tr></thead>
+            <tbody>
+              <tr><td>Actuador</td><td>Motor brushless con hélice; PWM de 1000 a 2000 µs</td></tr>
+              <tr><td>Potencia</td><td>ESC de 30 A alimentado con fuente de 12 V / 5 A</td></tr>
+              <tr><td>Sensor</td><td>HC-SR04 en la base, apuntando al carro</td></tr>
+              <tr><td>Control</td><td>Arduino Uno (13/09) y ESP32 (01/10), T<sub>s</sub> = 50 ms</td></tr>
+              <tr><td>Recorrido</td><td>100 cm; en reposo el sensor lee ≈ 11 cm</td></tr>
+              <tr><td>Seguridad</td><td>Failsafe: PWM a 1000 µs si y &gt; 85 cm</td></tr>
+            </tbody>
+          </table>
+          <div class="note">Entrada <b>u(t)</b>: ancho de pulso del ESC [µs]. Salida <b>y(t)</b>: altura del carro medida por el ultrasonido [cm]. El modelo relaciona sus <b>variaciones</b> alrededor del punto de sustentación.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== 3 · PROTOCOLO ===================== -->
+  <section class="slide" data-title="Protocolo">
+    <div class="panel">
+      <div class="head"><div class="kicker">Experimento</div><h2>Protocolo del ensayo de escalón</h2></div>
+      <ol class="steps">
+        <li><span class="n">PASO 1</span><span class="t">Armado del ESC</span><span class="small muted">1000 → 2000 → 1000 µs, 2 s cada uno, hélice despejada</span></li>
+        <li><span class="n">PASO 2</span><span class="t">Sustentación</span><span class="small muted">u₀ = 1762 µs durante 5 s hasta que el carro flota</span></li>
+        <li class="on"><span class="n">PASO 3</span><span class="t">Escalón +50 µs</span><span class="small muted">1812 µs durante 10 s (más de 5τ)</span></li>
+        <li><span class="n">PASO 4</span><span class="t">Apagado y registro</span><span class="small muted">1000 µs y guardado del CSV</span></li>
+      </ol>
+      <div class="body cols" style="grid-template-columns: 1.25fr 1fr;">
+        <div class="stack">
+          <h3>Programa de PWM aplicado</h3>
+          <svg class="chart" id="chart-prog" viewBox="0 0 600 300" role="img" aria-label="Programa de PWM: armado del ESC, 1762 µs durante 5 s, 1812 µs durante 10 s y apagado"></svg>
+          <div class="readouts">
+            <div class="readout"><span class="k">Muestras</span><span class="val">299</span></div>
+            <div class="readout"><span class="k">Periodo <span class="sym">T<sub>s</sub></span></span><span class="val">50<small>ms</small></span></div>
+            <div class="readout"><span class="k">Jitter</span><span class="val">50–51<small>ms</small></span></div>
+            <div class="readout"><span class="k">Serial</span><span class="val">115200<small>baud</small></span></div>
+          </div>
+        </div>
+        <div class="stack">
+          <h3>Datos crudos alrededor del escalón</h3>
+          <table class="mono">
+            <thead><tr><th class="r">tiempo_ms</th><th class="r">pwm_us</th><th class="r">altura_cm</th></tr></thead>
+            <tbody>
+              <tr><td class="r">4902</td><td class="r">1762</td><td class="r">16.50</td></tr>
+              <tr><td class="r">4952</td><td class="r">1762</td><td class="r">16.50</td></tr>
+              <tr class="ok"><td class="r">5002</td><td class="r v">1812</td><td class="r">16.50</td></tr>
+              <tr><td class="r">5052</td><td class="r">1812</td><td class="r">16.50</td></tr>
+              <tr><td class="r">5102</td><td class="r">1812</td><td class="r">16.50</td></tr>
+              <tr><td class="r">5152</td><td class="r">1812</td><td class="r">16.17</td></tr>
+              <tr><td class="r">5202</td><td class="r">1812</td><td class="r">16.17</td></tr>
+              <tr><td class="r">5252</td><td class="r">1812</td><td class="r">17.15</td></tr>
+              <tr><td class="r">5302</td><td class="r">1812</td><td class="r">16.82</td></tr>
+            </tbody>
+          </table>
+          <p class="small muted">Archivo <span class="mono">datos_escalon_20260913_193329.csv</span>. La altura tarda ~0.25 s en reaccionar al escalón.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== 4 · CURVA DE REACCIÓN ===================== -->
+  <section class="slide" data-title="Curva de reacción">
+    <div class="panel">
+      <div class="head"><div class="kicker">Datos · 13/09/2026</div><h2>Curva de reacción medida</h2></div>
+      <div class="body" style="grid-template-rows: auto auto 1fr;">
+        <div class="legend">
+          <span><i class="dot"></i>HC-SR04 crudo</span>
+          <span><i style="border-color: var(--signal)"></i>Filtrada, mediana de orden 5</span>
+          <span><i style="border-color: var(--model); border-top-style: dashed"></i>Modelo FOPDT</span>
+          <span><i style="border-color: var(--ink)"></i>PWM u(t)</span>
+        </div>
+        <svg class="chart" id="chart-full" viewBox="0 0 1000 418" role="img" aria-label="Altura medida, filtrada y modelo FOPDT entre -5 y 10 segundos respecto al escalón"></svg>
+        <div class="cols" style="grid-template-columns: repeat(3, 1fr); align-content: start;">
+          <div class="note"><b>Mediana de orden 5.</b> Quita los ecos sueltos del ultrasonido sin desplazar la señal en el tiempo, así no cambia t₀.</div>
+          <div class="note"><b>y₀ = 13.45 cm</b> es el promedio de los 5 s previos; <b>y∞ = 34.96 cm</b> es el promedio del último 15 % del registro.</div>
+          <div class="note warn"><b>Deriva previa.</b> Antes del escalón el carro ya subía de 13 a 16.5 cm: el punto de operación no estaba en reposo.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== 5 · CÁLCULO FIT 3 ===================== -->
+  <section class="slide" data-title="Cálculo Fit 3">
+    <div class="panel">
+      <div class="head"><div class="kicker">Cálculo</div><h2>Fit 3 paso a paso</h2></div>
+      <div class="body cols" style="grid-template-columns: 1.12fr .9fr;">
+        <div class="stack">
+          <div class="eq">
+            <math display="block"><mrow><mfrac><mrow><mi>y</mi><mo stretchy="false">(</mo><mi>t</mi><mo stretchy="false">)</mo><mo>−</mo><msub><mi>y</mi><mn>0</mn></msub></mrow><mrow><mi>Δ</mi><mi>y</mi></mrow></mfrac><mo>=</mo><mn>1</mn><mo>−</mo><msup><mi>e</mi><mrow><mo>−</mo><mo stretchy="false">(</mo><mi>t</mi><mo>−</mo><msub><mi>t</mi><mn>0</mn></msub><mo stretchy="false">)</mo><mo>/</mo><mi>τ</mi></mrow></msup></mrow></math>
+            <math display="block"><mrow><mo>⇒</mo><mspace width="0.6em"></mspace><mi>t</mi><mo>−</mo><msub><mi>t</mi><mn>0</mn></msub><mo>=</mo><mo>−</mo><mi>τ</mi><mspace width="0.1em"></mspace><mi>ln</mi><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mi>p</mi><mo stretchy="false">)</mo></mrow></math>
+          </div>
+          <p class="small muted">Con p = 0.283 sale t₁ − t₀ = τ/3 y con p = 0.632 sale t₂ − t₀ = τ. Restando: τ = 1.5 (t₂ − t₁).</p>
+          <ol class="calc">
+            <li><span class="s">Δu</span><span class="m">1812 − 1762 = <b>50 µs</b></span></li>
+            <li><span class="s">Δy</span><span class="m">34.96 − 13.45 = <b>21.51 cm</b></span></li>
+            <li><span class="s">K</span><span class="m">21.51 / 50 = <b>0.4302 cm/µs</b></span></li>
+            <li><span class="s">t₁</span><span class="m">y₀ + 0.283·Δy = 19.53 cm → <b>0.6427 s</b></span></li>
+            <li><span class="s">t₂</span><span class="m">y₀ + 0.632·Δy = 27.04 cm → <b>1.6906 s</b></span></li>
+            <li><span class="s">τ</span><span class="m">1.5 (1.6906 − 0.6427) = <b>1.5719 s</b></span></li>
+            <li><span class="s">t₀</span><span class="m">1.6906 − 1.5719 = <b>0.1188 s</b></span></li>
+          </ol>
+          <p class="small muted">t₁ y t₂ se interpolan entre las dos muestras que rodean cada cruce, así la resolución es mejor que T<sub>s</sub> = 50 ms.</p>
+        </div>
+        <div class="stack">
+          <svg class="chart" id="chart-zoom" viewBox="0 0 560 520" role="img" aria-label="Detalle de los cruces del 28.3 y 63.2 por ciento con t1, t2, tau y t0"></svg>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== 6 · RESULTADO MATLAB ===================== -->
+  <section class="slide" data-title="Modelo vs. medición">
+    <div class="panel">
+      <div class="head"><div class="kicker">Validación · MATLAB</div><h2>Modelo identificado frente a la medición</h2></div>
+      <div class="body cols" style="grid-template-columns: 1.2fr 1fr;">
+        <figure><img src="img/fit3_respuesta.png" alt="Figura de MATLAB: ensayo completo con datos crudos, filtrados, modelo FOPDT y puntos de 28.3 y 63.2 por ciento; abajo el PWM aplicado"><figcaption>IdentificacionFIT3.m → figuras/fit3_respuesta.png</figcaption></figure>
+        <div class="stack">
+          <table class="res">
+            <thead><tr><th>Símbolo</th><th>Descripción</th><th class="r">Valor</th></tr></thead>
+            <tbody>
+              <tr><td>u₀ → u∞</td><td>PWM</td><td class="v">1762 → 1812 µs</td></tr>
+              <tr><td>y₀ → y∞</td><td>Altura</td><td class="v">13.45 → 34.96 cm</td></tr>
+              <tr><td>K</td><td>Ganancia estática</td><td class="v">0.4302 cm/µs</td></tr>
+              <tr><td>τ</td><td>Constante de tiempo</td><td class="v">1.5719 s</td></tr>
+              <tr><td>t₀</td><td>Tiempo muerto</td><td class="v">0.1188 s</td></tr>
+              <tr><td>p</td><td>Polo −1/τ</td><td class="v">−0.6362 rad/s</td></tr>
+              <tr><td>RMSE</td><td>Error cuadrático medio</td><td class="v">0.754 cm</td></tr>
+              <tr><td>Fit</td><td>Contra la señal cruda</td><td class="v">84.02 %</td></tr>
+              <tr class="ok"><td>Fit</td><td>Contra la señal filtrada</td><td class="v">85.77 %</td></tr>
+            </tbody>
+          </table>
+          <div class="eq small">
+            <math display="block"><mrow><mtext>Fit</mtext><mo>=</mo><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mfrac><mrow><mo>‖</mo><mi>y</mi><mo>−</mo><mover><mi>y</mi><mo>^</mo></mover><mo>‖</mo></mrow><mrow><mo>‖</mo><mi>y</mi><mo>−</mo><mover><mi>y</mi><mo>¯</mo></mover><mo>‖</mo></mrow></mfrac><mo stretchy="false">)</mo><mo>·</mo><mn>100</mn><mo>%</mo><mspace width="0.8em"></mspace><mo>≥</mo><mn>80</mn><mo>%</mo><mspace width="0.3em"></mspace><mtext>✓</mtext></mrow></math>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== 7 · RESIDUOS ===================== -->
+  <section class="slide" data-title="Residuos">
+    <div class="panel">
+      <div class="head"><div class="kicker">Validación · MATLAB</div><h2>Análisis de residuos</h2></div>
+      <div class="body" style="grid-template-rows: auto 1fr;">
+        <figure style="align-items: center;"><img src="img/fit3_residuos.png" alt="Figura de MATLAB: residuos en el tiempo con bandas de dos sigma e histograma de los residuos" style="width: auto; max-width: 100%; max-height: 300px;"><figcaption>IdentificacionFIT3.m → figuras/fit3_residuos.png · e(t) = y(t) − ŷ(t)</figcaption></figure>
+        <div class="cols" style="grid-template-columns: 1fr 1.5fr; align-items: start;">
+          <div class="readouts" style="grid-auto-flow: row; grid-template-columns: 1fr 1fr;">
+            <div class="readout"><span class="k">Media</span><span class="val">0.27<small>cm</small></span></div>
+            <div class="readout"><span class="k">Desv. estándar</span><span class="val">0.71<small>cm</small></span></div>
+            <div class="readout"><span class="k">RMSE</span><span class="val">0.754<small>cm</small></span></div>
+            <div class="readout"><span class="k">|e| máximo</span><span class="val">3.05<small>cm</small></span></div>
+          </div>
+          <ul>
+            <li>El pico de <b>3 cm en t ≈ 0</b> viene de la deriva previa: el carro ya estaba en 16.5 cm y el modelo parte del promedio y₀.</li>
+            <li>Entre 1 y 1.6 s el modelo va por encima y entre 2.5 y 3 s por debajo: la subida es levemente <b>sigmoidal</b>, huella de un segundo polo que el FOPDT desprecia.</li>
+            <li>Los residuos no son ruido blanco, pero el 95 % cae dentro de ±1.4 cm, del orden de la resolución práctica del HC-SR04.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== 8 · POLOS ===================== -->
+  <section class="slide" data-title="Polos y respuesta">
+    <div class="panel">
+      <div class="head"><div class="kicker">Análisis · MATLAB</div><h2>Estabilidad y respuesta del modelo</h2></div>
+      <div class="body cols" style="grid-template-columns: 1.25fr 1fr;">
+        <div class="stack">
+          <figure><img src="img/mapa_polos.png" alt="Figura de MATLAB: mapa de polos con sgrid y el polo en menos 0.6362"><figcaption>Polosmonocopter.m → mapa_polos.png (pzmap + sgrid)</figcaption></figure>
+          <div class="readouts">
+            <div class="readout good"><span class="k">Polo</span><span class="val">−0.636<small>rad/s</small></span></div>
+            <div class="readout"><span class="k"><span class="sym">t<sub>s</sub></span> (2 %)</span><span class="val">6.27<small>s</small></span></div>
+            <div class="readout"><span class="k"><span class="sym">t₀ / τ</span></span><span class="val">0.076</span></div>
+          </div>
+          <p class="small">Un solo polo real negativo: la planta es <b>estable en lazo abierto</b> y responde sin sobreimpulso. Como 2/t₀ ≫ 1/τ, el retardo casi no cambia la dinámica dominante.</p>
+        </div>
+        <div class="stack">
+          <figure><img src="img/mapa_polos_pade.png" alt="Figura de MATLAB: polos y ceros con la aproximación de Padé del retardo"><figcaption>Padé(1) del retardo: cero en +16.84 y polo en −16.84</figcaption></figure>
+          <figure><img src="img/respuesta_modelo.png" alt="Figura de MATLAB: respuesta del modelo a un escalón de 50 microsegundos"><figcaption>step(Gp·e<sup>−t₀s</sup>) con Δu = 50 µs → Δy = 21.51 cm</figcaption></figure>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== 9 · SIMULINK ===================== -->
+  <section class="slide" data-title="Simulink">
+    <div class="panel">
+      <div class="head"><div class="kicker">Simulación · Simulink</div><h2>El mismo modelo en Simulink</h2></div>
+      <figure><img src="img/simulink_diagrama.png" alt="Diagrama de bloques de Simulink: Step, Transfer Fcn, Transport Delay, Sum con Constant 13.45 y Scope" style="padding: .4em 1em; max-height: 170px; object-fit: contain;"><figcaption>simulinkdelsistema.slx, exportado por ValidacionSimulink.m</figcaption></figure>
+      <div class="body cols" style="grid-template-columns: 1fr 1.2fr;">
+        <div class="stack">
+          <table>
+            <thead><tr><th>Bloque</th><th class="r">Parámetro</th></tr></thead>
+            <tbody>
+              <tr><td>Step</td><td class="v">t = 1 s, 0 → 50 µs</td></tr>
+              <tr><td>Transfer Fcn</td><td class="v">[0.4302] / [1.5719 1]</td></tr>
+              <tr><td>Transport Delay</td><td class="v">0.1188 s</td></tr>
+              <tr><td>Constant (y₀)</td><td class="v">13.45 cm</td></tr>
+              <tr><td>Simulación</td><td class="v">0 a 15 s</td></tr>
+            </tbody>
+          </table>
+          <div class="note good"><b>Fit = 85.79 %</b> y RMSE = 0.753 cm entre la salida del Scope y la altura filtrada. Coincide con el cálculo analítico: los bloques están bien parametrizados.</div>
+        </div>
+        <figure><img src="img/simulink_vs_experimental.png" alt="Figura de MATLAB: salida del Scope de Simulink superpuesta a la altura medida"><figcaption>ValidacionSimulink.m → simulink_vs_experimental.png</figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== 10 · CÓDIGO ===================== -->
+  <section class="slide" data-title="Código MATLAB">
+    <div class="panel">
+      <div class="head"><div class="kicker">MATLAB</div><h2>Cómo lo calcula el código</h2></div>
+      <ol class="flow">
+        <li>Leer CSV</li><li>Mediana 5</li><li>Detectar escalón</li><li>u₀, y₀, y∞</li><li>Cruces t₁, t₂</li><li>K, τ, t₀</li><li>Fit, RMSE</li><li>Figuras</li>
+      </ol>
+      <div class="body cols" style="grid-template-columns: 1fr 1.08fr;">
+        <table class="scripts">
+          <thead><tr><th>Script</th><th>Qué hace</th></tr></thead>
+          <tbody>
+            <tr><td>IdentificacionFIT3.m</td><td>Lee el ensayo, calcula K, τ, t₀, Fit y RMSE y guarda resultados_fit3.mat</td></tr>
+            <tr><td>Polosmonocopter.m</td><td>pzmap, Padé del retardo y respuesta al escalón de 50 µs</td></tr>
+            <tr><td>ValidacionSimulink.m</td><td>Simula el .slx sin modificarlo y lo compara con el ensayo</td></tr>
+            <tr><td>ComparacionEnsayos.m</td><td>Aplica Fit 3 a los cuatro ensayos y corrige Δu por la resolución del PWM</td></tr>
+          </tbody>
+        </table>
+        <div class="stack">
+          <pre class="code"><span class="c">%% 6. MÉTODO FIT 3 — cruces del 28.3 % y 63.2 %</span>
+y_28 = y0 + <span class="n">0.283</span> * delta_y;
+y_63 = y0 + <span class="n">0.632</span> * delta_y;
+i1 = <span class="k">find</span>(y &gt;= y_28, <span class="n">1</span>, <span class="s">'first'</span>);
+i2 = <span class="k">find</span>(y &gt;= y_63, <span class="n">1</span>, <span class="s">'first'</span>);
+<span class="c">% interpolación entre la muestra anterior y la actual</span>
+t1 = <span class="k">interp1</span>(y(i1-<span class="n">1</span>:i1), t(i1-<span class="n">1</span>:i1), y_28);
+t2 = <span class="k">interp1</span>(y(i2-<span class="n">1</span>:i2), t(i2-<span class="n">1</span>:i2), y_63);
+tau = <span class="n">1.5</span> * (t2 - t1);   <span class="c">% constante de tiempo [s]</span>
+t0  = <span class="k">max</span>(<span class="n">0</span>, t2 - tau); <span class="c">% tiempo muerto [s]</span>
+K   = delta_y / delta_u;  <span class="c">% ganancia [cm/µs]</span></pre>
+          <p class="small muted">Cada script abre con un bloque de ayuda (<span class="mono">help IdentificacionFIT3</span>): qué hace, entradas, salidas, deducción del método y toolboxes que necesita.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== 11 · REPETIBILIDAD ===================== -->
+  <section class="slide" data-title="Repetibilidad">
+    <div class="panel">
+      <div class="head"><div class="kicker">Experimento · 01/10/2026</div><h2>Repetibilidad con el ESP32</h2></div>
+      <div class="body cols" style="grid-template-columns: 1fr 1.05fr;">
+        <figure><img src="img/comparacion_ensayos.png" alt="Figura de MATLAB: cuatro ensayos de escalón, cada uno con su modelo Fit 3"><figcaption>ComparacionEnsayos.m → comparacion_ensayos.png</figcaption></figure>
+        <div class="stack">
+          <table class="ensayos">
+            <thead><tr><th>Ensayo</th><th class="r">Δu real</th><th class="r">K</th><th class="r">τ</th><th class="r">t₀</th><th class="r">Fit</th></tr></thead>
+            <tbody>
+              <tr class="ok"><td>13/09 · Uno</td><td class="v">50.0</td><td class="v">0.430</td><td class="v">1.57</td><td class="v">0.12</td><td class="v">85.8 %</td></tr>
+              <tr class="bad"><td>17:06 · 10 bits</td><td class="v">39.1</td><td class="v">0.408</td><td class="v">0.53</td><td class="v">0.45</td><td class="v fit">67.0 %</td></tr>
+              <tr class="bad"><td>17:29 · 10 bits</td><td class="v">58.6</td><td class="v">0.234</td><td class="v">1.35</td><td class="v">0.42</td><td class="v fit">61.1 %</td></tr>
+              <tr class="bad"><td>17:47 · 16 bits</td><td class="v">50.0</td><td class="v">0.341</td><td class="v">0.46</td><td class="v">0.43</td><td class="v fit">76.4 %</td></tr>
+            </tbody>
+          </table>
+          <div class="note warn"><b>Causa encontrada:</b> ESP32Servo usa por defecto un timer de 10 bits; el pulso sube en pasos de 20000/1024 = 19.53 µs y se trunca, así que los escalones de las 17:06 y 17:29 fueron de 39.1 y 58.6 µs. Con <span class="mono">setTimerWidth(16)</span> (17:47) la forma vuelve a ser de primer orden, pero t₀ ≈ 0.43 s y Fit = 76.4 %: el modelo del informe sigue siendo el del 13/09.</div>
+          <figure style="align-items: center;"><img src="img/cuantizacion_pwm.png" alt="Figura de MATLAB: pulso pedido contra pulso real con timer de 10 bits" style="width: auto; max-width: 100%; max-height: 200px;"><figcaption>ComparacionEnsayos.m → cuantizacion_pwm.png</figcaption></figure>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== 12 · ETAPA 2 Y CONCLUSIONES ===================== -->
+  <section class="slide" data-title="Conclusiones" data-frac="0.82">
+    <div class="panel">
+      <div class="head"><div class="kicker">Cierre</div><h2>Conclusiones y paso a la Etapa 2</h2></div>
+      <div class="body cols" style="grid-template-columns: 1.1fr 1fr;">
+        <ul>
+          <li>El ensayo del 13/09 da <b>G<sub>p</sub>(s) = 0.4302 e<sup>−0.1188s</sup>/(1.5719s + 1)</b> con Fit = 85.77 % y RMSE = 0.754 cm: cumple el criterio de la guía (Fit ≥ 80 %).</li>
+          <li>Planta estable en lazo abierto, con un polo en −0.636 rad/s y t₀/τ = 0.076: el retardo es pequeño frente a la inercia.</li>
+          <li>Simulink reproduce el ensayo con Fit = 85.79 %: el modelo está bien llevado a bloques.</li>
+          <li>Los residuos muestran la deriva previa y un segundo polo leve: conviene repetir el ensayo en sustentación estable cerca de 20 cm.</li>
+          <li>Con el ESP32 hubo que pasar el PWM a 16 bits; la planta actual tiene t₀ ≈ 0.43 s y debe re-identificarse antes de cerrar el lazo.</li>
+        </ul>
+        <div class="stack">
+          <h3>Sintonía SIMC del PID (τ<sub>c</sub> = 0.8 s)</h3>
+          <div class="eq">
+            <math display="block"><mrow><msub><mi>K</mi><mi>p</mi></msub><mo>=</mo><mfrac><mi>τ</mi><mrow><mi>K</mi><mo stretchy="false">(</mo><msub><mi>τ</mi><mi>c</mi></msub><mo>+</mo><msub><mi>t</mi><mn>0</mn></msub><mo stretchy="false">)</mo></mrow></mfrac><mo>=</mo><mfrac><mn>1.5719</mn><mrow><mn>0.4302</mn><mo>·</mo><mn>0.9188</mn></mrow></mfrac><mo>=</mo><mn>3.98</mn></mrow></math>
+          </div>
+          <table>
+            <thead><tr><th>Ganancia</th><th class="r">Valor</th></tr></thead>
+            <tbody>
+              <tr><td>K<sub>p</sub></td><td class="v">3.98 µs/cm</td></tr>
+              <tr><td>T<sub>i</sub> = mín(τ, 4(τ<sub>c</sub> + t₀))</td><td class="v">1.57 s</td></tr>
+              <tr><td>K<sub>i</sub> = K<sub>p</sub>/T<sub>i</sub></td><td class="v">2.53 µs/(cm·s)</td></tr>
+              <tr><td>K<sub>d</sub> (sobre la medida)</td><td class="v">0.3 µs·s/cm</td></tr>
+            </tbody>
+          </table>
+          <div class="note warn">Con la planta del 01/10 (t₀ = 0.43 s) la misma regla da K<sub>p</sub> ≈ 1.25: las ganancias de arriba serían muy agresivas.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <nav id="nav" aria-label="Navegación de láminas">
+    <button id="prev" class="btn" type="button" aria-label="Lámina anterior">←</button>
+    <ol id="ticks"></ol>
+    <span id="count">01 / 12</span>
+    <button id="next" class="btn" type="button" aria-label="Lámina siguiente">→</button>
+    <button id="pausa" class="btn" type="button" aria-pressed="false" title="Pausar o reanudar el fondo 3D (tecla P)">Pausar 3D</button>
+  </nav>
+
+  <div id="hud" aria-live="off">
+    <span class="tag">Modelo en vivo</span>
+    <span>u <b id="hud-u">1762</b> µs</span>
+    <span>y <b id="hud-y">11.0</b> cm</span>
+    <span class="fase" id="hud-f">reposo</span>
+  </div>
+</main>
+
+<script src="datos.js"></script>
+<script src="lib/three.min.js"></script>
+
+<!-- =================== Láminas: escala, navegación y gráficas =================== -->
+<script>
+(function () {
+  'use strict';
+  var stage = document.getElementById('stage');
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var ticks = document.getElementById('ticks');
+  var count = document.getElementById('count');
+  var stacked = window.matchMedia('(max-width: 760px)');
+  var cur = 0;
+
+  // ---------- escala del escenario 1600×900 ----------
+  var metrics = { s: 1, left: 0, top: 0, stacked: false };
+  function fit() {
+    var W = window.innerWidth, H = window.innerHeight;
+    metrics.stacked = stacked.matches;
+    if (metrics.stacked) { stage.style.transform = ''; stage.style.left = ''; stage.style.top = ''; return; }
+    var s = Math.min(W / 1600, H / 900);
+    metrics.s = s;
+    metrics.left = (W - 1600 * s) / 2;
+    metrics.top = (H - 900 * s) / 2;
+    stage.style.left = metrics.left + 'px';
+    stage.style.top = metrics.top + 'px';
+    stage.style.transform = 'scale(' + s + ')';
+  }
+  window.addEventListener('resize', fit);
+  fit();
+
+  // ---------- navegación ----------
+  slides.forEach(function (sl, i) {
+    var li = document.createElement('li');
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'tick';
+    b.title = (i + 1) + '. ' + sl.dataset.title;
+    b.setAttribute('aria-label', 'Ir a la lámina ' + (i + 1) + ': ' + sl.dataset.title);
+    b.addEventListener('click', function () { show(i); });
+    li.appendChild(b); ticks.appendChild(li);
+  });
+  var tickBtns = ticks.querySelectorAll('.tick');
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+
+  function show(i) {
+    i = Math.max(0, Math.min(slides.length - 1, i));
+    slides[cur].classList.remove('is-active');
+    cur = i;
+    var sl = slides[cur];
+    sl.classList.add('is-active');
+    count.textContent = pad(cur + 1) + ' / ' + pad(slides.length);
+    tickBtns.forEach(function (b, k) { b.classList.toggle('on', k === cur); b.classList.toggle('done', k < cur); });
+    try { history.replaceState(null, '', '#' + (cur + 1)); } catch (e) {}
+    if (window.Banco3D) window.Banco3D.encuadre(parseFloat(sl.dataset.frac || '0.845'), parseFloat(sl.dataset.zoom || '1'));
+  }
+  document.getElementById('prev').addEventListener('click', function () { show(cur - 1); });
+  document.getElementById('next').addEventListener('click', function () { show(cur + 1); });
+  document.addEventListener('keydown', function (e) {
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+    var k = e.key;
+    if (k === 'ArrowRight' || k === 'PageDown' || k === ' ' || k === 'Enter') { e.preventDefault(); show(cur + 1); }
+    else if (k === 'ArrowLeft' || k === 'PageUp' || k === 'Backspace') { e.preventDefault(); show(cur - 1); }
+    else if (k === 'Home') show(0);
+    else if (k === 'End') show(slides.length - 1);
+    else if (k === 'f' || k === 'F') {
+      if (!document.fullscreenElement && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(function () {});
+      else if (document.exitFullscreen) document.exitFullscreen().catch(function () {});
+    }
+    else if (k === 'p' || k === 'P') document.getElementById('pausa').click();
+  });
+  window.Laminas = { metrics: metrics, fit: fit, show: show };
+
+  // ---------- gráficas SVG con los datos reales ----------
+  var NS = 'http://www.w3.org/2000/svg';
+  function el(tag, attrs, parent, text) {
+    var n = document.createElementNS(NS, tag);
+    for (var a in attrs) n.setAttribute(a, attrs[a]);
+    if (text != null) n.textContent = text;
+    if (parent) parent.appendChild(n);
+    return n;
+  }
+  function fmt(v) { return (Math.round(v * 100) / 100).toString(); }
+  function axes(svg, c) {
+    var m = c.m, W = c.W, H = c.H;
+    var sx = function (v) { return m.l + (v - c.x[0]) / (c.x[1] - c.x[0]) * (W - m.l - m.r); };
+    var sy = function (v) { return H - m.b - (v - c.y[0]) / (c.y[1] - c.y[0]) * (H - m.t - m.b); };
+    var g = el('g', { 'class': 'grid' }, svg);
+    c.xt.forEach(function (v) {
+      el('line', { x1: sx(v), x2: sx(v), y1: m.t, y2: H - m.b }, g);
+      el('text', { x: sx(v), y: H - m.b + 18, 'text-anchor': 'middle' }, svg, c.xf ? c.xf(v) : fmt(v));
+    });
+    c.yt.forEach(function (v) {
+      el('line', { x1: m.l, x2: W - m.r, y1: sy(v), y2: sy(v) }, g);
+      el('text', { x: m.l - 8, y: sy(v) + 4, 'text-anchor': 'end' }, svg, c.yf ? c.yf(v) : fmt(v));
+    });
+    el('path', { 'class': 'axis', d: 'M' + m.l + ' ' + m.t + 'V' + (H - m.b) + 'H' + (W - m.r) }, svg);
+    if (c.xl) el('text', { 'class': 'lbl', x: (m.l + W - m.r) / 2, y: H - 4, 'text-anchor': 'middle' }, svg, c.xl);
+    if (c.yl) el('text', { 'class': 'lbl', x: 14, y: (m.t + H - m.b) / 2, 'text-anchor': 'middle', transform: 'rotate(-90 14 ' + (m.t + H - m.b) / 2 + ')' }, svg, c.yl);
+    return { sx: sx, sy: sy };
+  }
+  function line(xs, ys, sx, sy, x0, x1) {
+    var d = '';
+    for (var i = 0; i < xs.length; i++) {
+      if (xs[i] < x0 || xs[i] > x1) continue;
+      d += (d ? 'L' : 'M') + sx(xs[i]).toFixed(1) + ' ' + sy(ys[i]).toFixed(1);
+    }
+    return d;
+  }
+  function modelo(p, t) { return t < p.t0 ? p.y0 : p.y0 + p.dy * (1 - Math.exp(-(t - p.t0) / p.tau)); }
+  function modelPath(p, sx, sy, x0, x1) {
+    var d = '';
+    for (var t = x0; t <= x1 + 1e-9; t += 0.02) d += (d ? 'L' : 'M') + sx(t).toFixed(1) + ' ' + sy(modelo(p, t)).toFixed(1);
+    return d;
+  }
+
+  var D = window.DATOS && window.DATOS.e1309;
+
+  // Programa de PWM del protocolo (lámina 3)
+  (function () {
+    var svg = document.getElementById('chart-prog');
+    var c = { W: 600, H: 300, m: { l: 64, r: 14, t: 16, b: 42 }, x: [-6, 16], y: [950, 2060],
+      xt: [-6, -4, -2, 0, 2, 4, 6, 8, 10, 12, 14, 16], yt: [1000, 1250, 1500, 1762, 2000],
+      xf: function (v) { return v; }, xl: 't [s] (0 = inicio de la sustentación)', yl: 'PWM [µs]' };
+    var a = axes(svg, c);
+    var pts = [[-6, 1000], [-4, 1000], [-4, 2000], [-2, 2000], [-2, 1000], [0, 1000], [0, 1762], [5, 1762], [5, 1812], [15, 1812], [15, 1000], [16, 1000]];
+    el('rect', { 'class': 'band', x: a.sx(5), y: 16, width: a.sx(15) - a.sx(5), height: 300 - 16 - 42 }, svg);
+    el('path', { 'class': 'uline', d: pts.map(function (p, i) { return (i ? 'L' : 'M') + a.sx(p[0]) + ' ' + a.sy(p[1]); }).join('') }, svg);
+    el('text', { x: a.sx(-4), y: a.sy(2000) - 8 }, svg, 'armado');
+    el('text', { x: a.sx(0.4), y: a.sy(1762) + 20 }, svg, 'u₀ = 1762');
+    el('text', { 'class': 'accent', x: a.sx(5.4), y: a.sy(1812) - 10 }, svg, 'escalón → 1812 µs (10 s)');
+  })();
+
+  if (!D) return;
+  var p = D.p;
+
+  // Curva de reacción completa (lámina 4)
+  (function () {
+    var svg = document.getElementById('chart-full');
+    var top = { W: 1000, H: 300, m: { l: 64, r: 120, t: 12, b: 26 }, x: [-5, 10], y: [8, 40],
+      xt: [-4, -2, 0, 2, 4, 6, 8, 10], yt: [10, 15, 20, 25, 30, 35, 40], yl: 'y [cm]' };
+    var g1 = el('g', {}, svg);
+    var a = axes(g1, top);
+    el('rect', { 'class': 'zone', x: a.sx(-1.6), y: a.sy(17.5), width: a.sx(0) - a.sx(-1.6), height: a.sy(12.5) - a.sy(17.5) }, g1);
+    D.t.forEach(function (t, i) { if (t >= -5 && t <= 10) el('circle', { 'class': 'raw', cx: a.sx(t).toFixed(1), cy: a.sy(D.y[i]).toFixed(1), r: 2.4 }, g1); });
+    el('path', { 'class': 'filt', d: line(D.t, D.yf, a.sx, a.sy, -5, 10) }, g1);
+    el('path', { 'class': 'mod', d: modelPath(p, a.sx, a.sy, -5, 10) }, g1);
+    el('line', { 'class': 'guide', x1: a.sx(0), x2: a.sx(0), y1: 12, y2: 300 - 26 }, g1);
+    el('text', { x: a.sx(0) + 6, y: 30 }, g1, 'escalón');
+    el('text', { 'class': 'lbl', x: 1000 - 112, y: a.sy(p.y0) + 5 }, g1, 'y₀ = ' + p.y0.toFixed(2));
+    el('text', { 'class': 'lbl', x: 1000 - 112, y: a.sy(p.yi) + 5 }, g1, 'y∞ = ' + p.yi.toFixed(2));
+    el('text', { 'class': 'accent', x: a.sx(-1.6) - 8, y: a.sy(19.5), 'text-anchor': 'end' }, g1, 'deriva 13 → 16.5 cm');
+    el('path', { 'class': 'bracket', d: 'M' + (a.sx(-1.6) - 4) + ' ' + (a.sy(19.5) + 6) + 'L' + a.sx(-1.2) + ' ' + a.sy(17.6) }, g1);
+    // Entrada u(t)
+    var g2 = el('g', { transform: 'translate(0 300)' }, svg);
+    var bot = { W: 1000, H: 118, m: { l: 64, r: 120, t: 8, b: 46 }, x: [-5, 10], y: [1740, 1830],
+      xt: [-4, -2, 0, 2, 4, 6, 8, 10], yt: [1762, 1812], xl: 't relativo al escalón [s]' };
+    var b = axes(g2, bot);
+    var d = '', prev = null;
+    D.t.forEach(function (t, i) {
+      if (t < -5 || t > 10) return;
+      var X = b.sx(t).toFixed(1), Y = b.sy(D.u[i]).toFixed(1);
+      d += prev === null ? 'M' + X + ' ' + Y : 'H' + X + 'V' + Y;
+      prev = Y;
+    });
+    el('path', { 'class': 'uline', d: d }, g2);
+    el('text', { 'class': 'lbl', x: 1000 - 112, y: b.sy(1787) + 5 }, g2, 'u(t) [µs]');
+  })();
+
+  // Detalle de los cruces Fit 3 (lámina 5)
+  (function () {
+    var svg = document.getElementById('chart-zoom');
+    var c = { W: 560, H: 520, m: { l: 58, r: 16, t: 40, b: 44 }, x: [-0.5, 4], y: [12, 37],
+      xt: [0, 1, 2, 3, 4], yt: [15, 20, 25, 30, 35], xl: 't relativo al escalón [s]', yl: 'y [cm]' };
+    var a = axes(svg, c);
+    var y28 = p.y0 + 0.283 * p.dy, y63 = p.y0 + 0.632 * p.dy;
+    D.t.forEach(function (t, i) { if (t >= -0.5 && t <= 4) el('circle', { 'class': 'raw', cx: a.sx(t).toFixed(1), cy: a.sy(D.y[i]).toFixed(1), r: 2.8 }, svg); });
+    el('path', { 'class': 'filt', d: line(D.t, D.yf, a.sx, a.sy, -0.5, 4) }, svg);
+    el('path', { 'class': 'mod', d: modelPath(p, a.sx, a.sy, -0.5, 4) }, svg);
+    [[y28, p.t1, '28.3 % → ' + y28.toFixed(2) + ' cm', 't₁ = ' + p.t1.toFixed(3)], [y63, p.t2, '63.2 % → ' + y63.toFixed(2) + ' cm', 't₂ = ' + p.t2.toFixed(3)]].forEach(function (q) {
+      el('path', { 'class': 'guide', d: 'M' + a.sx(-0.5) + ' ' + a.sy(q[0]) + 'H' + a.sx(q[1]) + 'V' + a.sy(12) }, svg);
+      el('circle', { 'class': 'mark', cx: a.sx(q[1]), cy: a.sy(q[0]), r: 7 }, svg);
+      el('text', { 'class': 'lbl', x: a.sx(q[1]) + 12, y: a.sy(q[0]) + 18 }, svg, q[2]);
+      el('text', { 'class': 'accent', x: a.sx(q[1]) + 5, y: a.sy(12) - 8 }, svg, q[3]);
+    });
+    // τ entre t0 y t2, y t0 sobre el eje
+    var yb = 26;
+    el('path', { 'class': 'bracket', d: 'M' + a.sx(p.t0) + ' ' + (yb + 6) + 'V' + (yb - 6) + 'M' + a.sx(p.t0) + ' ' + yb + 'H' + a.sx(p.t2) + 'M' + a.sx(p.t2) + ' ' + (yb + 6) + 'V' + (yb - 6) }, svg);
+    el('text', { 'class': 'accent', x: (a.sx(p.t0) + a.sx(p.t2)) / 2, y: yb - 10, 'text-anchor': 'middle' }, svg, 'τ = 1.5 (t₂ − t₁) = ' + p.tau.toFixed(3) + ' s');
+    el('line', { 'class': 'guide', x1: a.sx(p.t0), x2: a.sx(p.t0), y1: yb, y2: a.sy(12) }, svg);
+    el('text', { 'class': 'accent', x: a.sx(p.t0) - 6, y: yb + 4, 'text-anchor': 'end' }, svg, 't₀ = ' + p.t0.toFixed(3));
+  })();
+})();
+</script>
+
+<!-- =================== Fondo: banco 3D que gira =================== -->
+<script>
+(function () {
+  'use strict';
+  if (!window.THREE) return;
+  var canvas = document.getElementById('bg3d');
+  var renderer;
+  try { renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true, powerPreference: 'high-performance' }); }
+  catch (e) { return; }
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
+
+  var scene = new THREE.Scene();
+  var camera = new THREE.PerspectiveCamera(28, 1, 0.05, 60);
+
+  // ---------- luces ----------
+  scene.add(new THREE.HemisphereLight(0xffffff, 0xcfc8bc, 1.35));
+  var key = new THREE.DirectionalLight(0xffffff, 2.1);
+  key.position.set(1.6, 3.2, 2.4);
+  key.castShadow = true;
+  key.shadow.mapSize.set(1024, 1024);
+  key.shadow.camera.left = -1.2; key.shadow.camera.right = 1.2;
+  key.shadow.camera.top = 1.8; key.shadow.camera.bottom = -1.0;
+  key.shadow.camera.near = 0.5; key.shadow.camera.far = 8;
+  key.shadow.bias = -0.0004;
+  scene.add(key);
+  var fill = new THREE.DirectionalLight(0xfff4e8, 0.55);
+  fill.position.set(-2, 1.4, -1.5);
+  scene.add(fill);
+
+  var suelo = new THREE.Mesh(new THREE.CircleGeometry(2.4, 64), new THREE.ShadowMaterial({ opacity: 0.16 }));
+  suelo.rotation.x = -Math.PI / 2;
+  suelo.receiveShadow = true;
+  scene.add(suelo);
+
+  // ---------- materiales ----------
+  function std(color, rough, metal, extra) {
+    var o = { color: color, roughness: rough, metalness: metal || 0 };
+    for (var k in extra || {}) o[k] = extra[k];
+    return new THREE.MeshStandardMaterial(o);
+  }
+  var M = {
+    marco: std(0x1c1e21, 0.55),
+    base: std(0x232528, 0.7),
+    acero: std(0xd4d8dd, 0.22, 0.92),
+    resorte: std(0x9aa0a7, 0.32, 0.85),
+    goma: std(0x111214, 0.9),
+    helice: std(0xff5a1f, 0.42, 0.05, { transparent: true }),
+    campana: std(0xd08a2c, 0.32, 0.75),
+    motor: std(0x2b2d31, 0.45, 0.5),
+    plata: std(0xc4c8cc, 0.3, 0.85),
+    pcb: std(0x1f5fa8, 0.6),
+    protoboard: std(0xf1f1ec, 0.85),
+    esp: std(0x23262b, 0.55),
+    fuente: std(0x9ba1a7, 0.42, 0.6),
+    cinta: std(0x0f1011, 0.3),
+    cable: std(0x18191b, 0.6),
+    rojo: std(0xc8322a, 0.6),
+    peluche: std(0xa36a3c, 1),
+    pelucheOscuro: std(0x6e4524, 1),
+    ojo: std(0x0c0c0c, 0.18, 0.1),
+    cinta2: std(0x9ad13a, 0.6)
+  };
+  var blurMat = new THREE.MeshBasicMaterial({ color: 0xff6a2e, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide });
+
+  function box(w, h, d, mat, x, y, z, parent) {
+    var m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true;
+    (parent || rig).add(m); return m;
+  }
+  function cyl(rt, rb, h, mat, x, y, z, parent, seg) {
+    var m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg || 20), mat);
+    m.position.set(x, y, z); m.castShadow = true;
+    (parent || rig).add(m); return m;
+  }
+  function blob(rx, ry, rz, mat, x, y, z, parent) {
+    var m = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 20), mat);
+    m.scale.set(rx, ry, rz); m.position.set(x, y, z); m.castShadow = true;
+    (parent || rig).add(m); return m;
+  }
+
+  // ---------- dimensiones del banco [m] ----------
+  var BASE_H = 0.03, ALTO = 1.15, POSTE = 0.04, ANCHO = 0.50, RIEL_X = 0.18;
+  var TOPE = BASE_H + ALTO;                 // cara superior del travesaño
+  var SENSOR_Y = 0.045;                     // cara del HC-SR04
+  function yMundo(cm) { return SENSOR_Y + cm / 100; }   // altura medida → y del carro
+
+  var rig = new THREE.Group();
+  scene.add(rig);
+
+  // Base, postes, travesaño y varillas
+  box(0.62, BASE_H, 0.34, M.base, 0, BASE_H / 2, 0.03);
+  var postX = ANCHO / 2 - POSTE / 2;
+  box(POSTE, ALTO, POSTE, M.marco, -postX, BASE_H + ALTO / 2, 0);
+  box(POSTE, ALTO, POSTE, M.marco, postX, BASE_H + ALTO / 2, 0);
+  box(ANCHO + 0.04, 0.045, 0.06, M.marco, 0, TOPE - 0.0225, 0);
+  var largoRiel = TOPE - 0.045 - BASE_H;
+  [-RIEL_X, RIEL_X].forEach(function (x) {
+    cyl(0.005, 0.005, largoRiel, M.acero, x, BASE_H + largoRiel / 2, 0, rig, 16);
+    // Resorte helicoidal sobre una base de goma
+    cyl(0.02, 0.022, 0.024, M.goma, x, BASE_H + 0.012, 0);
+    var pts = [], vueltas = 9, h0 = BASE_H + 0.024, h1 = yMundo(11) - 0.004;
+    for (var i = 0; i <= vueltas * 24; i++) {
+      var f = i / (vueltas * 24), ang = f * vueltas * Math.PI * 2;
+      pts.push(new THREE.Vector3(x + Math.cos(ang) * 0.015, h0 + f * (h1 - h0), Math.sin(ang) * 0.015));
+    }
+    var res = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), vueltas * 24, 0.0018, 6, false), M.resorte);
+    res.castShadow = true; rig.add(res);
+  });
+
+  // Electrónica en la base: HC-SR04, protoboard con ESP32, fuente y cinta en el poste
+  box(0.046, 0.0016, 0.021, M.pcb, 0, BASE_H + 0.005, 0);
+  cyl(0.0082, 0.0082, 0.012, M.plata, -0.013, BASE_H + 0.011, 0);
+  cyl(0.0082, 0.0082, 0.012, M.plata, 0.013, BASE_H + 0.011, 0);
+  box(0.165, 0.009, 0.055, M.protoboard, -0.11, BASE_H + 0.0045, 0.115);
+  box(0.052, 0.006, 0.028, M.esp, -0.11, BASE_H + 0.012, 0.115);
+  box(0.018, 0.003, 0.016, M.plata, -0.09, BASE_H + 0.0165, 0.115);
+  box(0.12, 0.05, 0.08, M.fuente, 0.12, BASE_H + 0.025, -0.09);
+  box(0.042, 0.21, 0.046, M.cinta, postX + 0.012, 0.32, 0.004);
+  cyl(0.003, 0.003, 0.08, M.rojo, postX + 0.03, 0.46, 0.015);
+
+  // ---------- carro ----------
+  var carro = new THREE.Group();
+  rig.add(carro);
+  box(0.42, 0.014, 0.075, M.marco, 0, 0.007, 0, carro);
+  cyl(0.011, 0.011, 0.05, M.goma, -RIEL_X, 0.006, 0, carro);
+  cyl(0.011, 0.011, 0.05, M.goma, RIEL_X, 0.006, 0, carro);
+  box(0.042, 0.006, 0.042, M.motor, 0, 0.017, 0, carro);
+  cyl(0.015, 0.015, 0.012, M.motor, 0, 0.026, 0, carro);
+  cyl(0.0155, 0.0155, 0.016, M.campana, 0, 0.04, 0, carro);
+  cyl(0.0022, 0.0022, 0.02, M.acero, 0, 0.055, 0, carro, 8);
+  var helice = new THREE.Group();
+  helice.position.set(0, 0.058, 0);
+  carro.add(helice);
+  [-1, 1].forEach(function (s) {
+    var pala = box(0.088, 0.003, 0.017, M.helice, s * 0.047, 0, 0, helice);
+    pala.rotation.x = s * 0.22;
+  });
+  cyl(0.007, 0.007, 0.008, M.plata, 0, 0.002, 0, helice);
+  var cono = new THREE.Mesh(new THREE.ConeGeometry(0.0065, 0.018, 16), M.plata);
+  cono.position.y = 0.014; helice.add(cono);
+  var disco = new THREE.Mesh(new THREE.RingGeometry(0.009, 0.096, 48), blurMat);
+  disco.rotation.x = -Math.PI / 2; disco.position.set(0, 0.058, 0);
+  carro.add(disco);
+
+  // Cable del motor que cuelga hasta la base (se recalcula cada cuadro)
+  var cableMesh = new THREE.Mesh(new THREE.BufferGeometry(), M.cable);
+  cableMesh.castShadow = true; rig.add(cableMesh);
+  function actualizarCable(yc) {
+    var a = new THREE.Vector3(0.14, yc + 0.006, 0.035);
+    var b = new THREE.Vector3(postX - 0.03, BASE_H + 0.01, 0.12);
+    var ctrl = new THREE.Vector3((a.x + b.x) / 2 + 0.03, Math.min(a.y, b.y) - 0.02, 0.1);
+    cableMesh.geometry.dispose();
+    cableMesh.geometry = new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(a, ctrl, b), 24, 0.0028, 5, false);
+  }
+
+  // ---------- capibara de peluche sobre el travesaño ----------
+  var capi = new THREE.Group();
+  capi.position.set(-0.07, TOPE, 0.0);
+  capi.rotation.y = 0.18;
+  rig.add(capi);
+  // Capibara: cabeza grande y alargada, hocico chato, ojos altos y orejas pequeñas atrás
+  blob(0.085, 0.074, 0.07, M.peluche, 0, 0.068, -0.006, capi);                 // cuerpo
+  blob(0.058, 0.054, 0.085, M.peluche, 0, 0.15, 0.035, capi).rotation.x = 0.1;  // cabeza
+  blob(0.052, 0.044, 0.042, M.peluche, 0, 0.137, 0.098, capi);                   // hocico
+  blob(0.036, 0.022, 0.012, M.pelucheOscuro, 0, 0.142, 0.137, capi);             // nariz
+  blob(0.0045, 0.006, 0.004, M.ojo, -0.013, 0.146, 0.147, capi);                 // fosas nasales
+  blob(0.0045, 0.006, 0.004, M.ojo, 0.013, 0.146, 0.147, capi);
+  blob(0.0075, 0.0075, 0.0075, M.ojo, -0.047, 0.176, 0.06, capi);               // ojos
+  blob(0.0075, 0.0075, 0.0075, M.ojo, 0.047, 0.176, 0.06, capi);
+  blob(0.013, 0.012, 0.006, M.pelucheOscuro, -0.04, 0.202, -0.012, capi);        // orejas
+  blob(0.013, 0.012, 0.006, M.pelucheOscuro, 0.04, 0.202, -0.012, capi);
+  [-0.042, 0.042].forEach(function (x) {                                         // patas colgando por delante
+    cyl(0.016, 0.018, 0.07, M.peluche, x, -0.012, 0.05, capi, 14);
+    blob(0.019, 0.012, 0.023, M.pelucheOscuro, x, -0.048, 0.056, capi);
+    blob(0.03, 0.022, 0.042, M.peluche, x * 1.6, 0.022, -0.022, capi);           // patas traseras
+  });
+  // Cinta verde atada al cuello, con el moño a un lado como en el banco real
+  var lazo = new THREE.Mesh(new THREE.TorusGeometry(0.066, 0.008, 10, 48), M.cinta2);
+  lazo.position.set(0, 0.112, 0.012); lazo.rotation.x = Math.PI / 2 + 0.3; lazo.castShadow = true;
+  capi.add(lazo);
+  [-1, 1].forEach(function (s) {
+    var nudo = new THREE.Mesh(new THREE.TorusGeometry(0.016, 0.005, 8, 24), M.cinta2);
+    nudo.position.set(0.068, 0.12 + s * 0.012, 0.03); nudo.rotation.set(0, Math.PI / 2, s * 0.6);
+    capi.add(nudo);
+  });
+
+  // ---------- regla en cm y líneas de y0 / y∞ (requieren la fuente cargada) ----------
+  function textoSprite(txt, alto, color) {
+    var c = document.createElement('canvas'), g = c.getContext('2d'), fpx = 64;
+    var font = '600 ' + fpx + 'px "JetBrains Mono", Consolas, monospace';
+    g.font = font; c.width = Math.ceil(g.measureText(txt).width) + 16; c.height = fpx + 16;
+    g.font = font; g.fillStyle = color; g.textBaseline = 'middle'; g.fillText(txt, 8, c.height / 2);
+    var tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+    var sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+    sp.scale.set(alto * c.width / c.height, alto, 1);
+    sp.center.set(0, 0.5);
+    return sp;
+  }
+  function construirRegla() {
+    var MIN = -2, MAX = 102, c = document.createElement('canvas');
+    c.width = 128; c.height = 4096;
+    var g = c.getContext('2d');
+    g.strokeStyle = g.fillStyle = '#f2f2ee';
+    g.font = '600 34px "JetBrains Mono", Consolas, monospace'; g.textBaseline = 'middle';
+    for (var cm = 0; cm <= 100; cm++) {
+      var y = c.height - (cm - MIN) / (MAX - MIN) * c.height;
+      var largo = cm % 10 === 0 ? 54 : cm % 5 === 0 ? 34 : 16;
+      g.lineWidth = cm % 10 === 0 ? 4 : 2.5;
+      g.beginPath(); g.moveTo(0, y); g.lineTo(largo, y); g.stroke();
+      if (cm % 10 === 0) g.fillText(String(cm), 60, y);
+    }
+    var tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    var regla = new THREE.Mesh(new THREE.PlaneGeometry(0.036, (MAX - MIN) / 100), new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
+    regla.position.set(-postX, yMundo((MIN + MAX) / 2), POSTE / 2 + 0.0008);
+    rig.add(regla);
+
+    // Alturas del ensayo: y0 = 13.45 cm (sustentación) y y∞ = 34.96 cm (final)
+    [[13.45, 0x454c54, '#454c54', 'y₀ 13.45 cm'], [34.96, 0xc62828, '#c62828', 'y∞ 34.96 cm']].forEach(function (r) {
+      var linea = new THREE.Mesh(new THREE.BoxGeometry(2 * RIEL_X + 0.06, 0.0022, 0.0022), new THREE.MeshBasicMaterial({ color: r[1], transparent: true, opacity: 0.75 }));
+      linea.position.set(0, yMundo(r[0]), 0.045);
+      rig.add(linea);
+      var et = textoSprite(r[3], 0.026, r[2]);
+      et.position.set(postX + 0.05, yMundo(r[0]), 0.03);
+      rig.add(et);
+    });
+  }
+  var fuentes = document.fonts && document.fonts.load ? document.fonts.load('600 34px "JetBrains Mono"') : Promise.resolve();
+  fuentes.then(construirRegla, construirRegla);
+
+  // ---------- movimiento: el carro sigue al modelo identificado ----------
+  var P = { y0: 13.45, dy: 21.51, tau: 1.5719, t0: 0.1188, u0: 1762, du: 50, reposo: 11.0 };
+  var CICLO = 25;
+  function suave(x) { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); }
+  function fopdt(t) { return t < P.t0 ? 0 : 1 - Math.exp(-(t - P.t0) / P.tau); }
+  // Devuelve altura [cm], PWM [µs], giro de la hélice (0 a 1) y fase
+  function estado(tc) {
+    var yA = P.y0 + P.dy * fopdt(10);
+    if (tc < 1.5) return { y: P.reposo, u: 1000, giro: 0, fase: 'reposo' };
+    if (tc < 3) return { y: P.reposo, u: 1000 + (P.u0 - 1000) * suave((tc - 1.5) / 1.5), giro: suave((tc - 1.5) / 1.5), fase: 'arranque del motor' };
+    if (tc < 4.5) return { y: P.reposo + (P.y0 - P.reposo) * suave((tc - 3) / 1.5), u: P.u0, giro: 1, fase: 'despegue' };
+    if (tc < 6.5) return { y: P.y0, u: P.u0, giro: 1, fase: 'sustentación' };
+    if (tc < 16.5) return { y: P.y0 + P.dy * fopdt(tc - 6.5), u: P.u0 + P.du, giro: 1, fase: 'escalón +50 µs' };
+    if (tc < 22.5) return { y: yA - (yA - P.y0) * fopdt(tc - 16.5), u: P.u0, giro: 1, fase: 'escalón −50 µs' };
+    var yB = yA - (yA - P.y0) * fopdt(6);
+    var f = suave((tc - 22.5) / 2.5);
+    return { y: yB + (P.reposo - yB) * f, u: P.u0 - (P.u0 - 1000) * f, giro: 1 - f, fase: 'aterrizaje' };
+  }
+
+  // ---------- encuadre: la lámina decide dónde va el banco ----------
+  var enc = { frac: 0.80, zoom: 1.06, fracObj: 0.80, zoomObj: 1.06 };
+  var FOV = 28 * Math.PI / 180, CENTRO_Y = 0.68, VIS_H = 1.72;
+  function aplicarCamara(ang) {
+    var W = window.innerWidth, H = window.innerHeight;
+    var L = window.Laminas ? window.Laminas.metrics : { s: Math.min(W / 1600, H / 900), left: 0, top: 0, stacked: false };
+    var visH, px, py;
+    if (L.stacked) { visH = 1.65 * Math.max(1, H / W * 0.9); px = W / 2; py = H * 0.5; }
+    else {
+      visH = VIS_H * (H / (900 * L.s)) / enc.zoom;
+      px = L.left + enc.frac * 1600 * L.s;
+      py = L.top + 420 * L.s;
+    }
+    var dist = visH / (2 * Math.tan(FOV / 2));
+    camera.position.set(Math.sin(ang) * dist, CENTRO_Y + 0.28, Math.cos(ang) * dist);
+    camera.lookAt(0, CENTRO_Y, 0);
+    camera.setViewOffset(W, H, W / 2 - px, H / 2 - py, W, H);
+  }
+  function redimensionar() {
+    var W = window.innerWidth, H = window.innerHeight;
+    renderer.setSize(W, H, false);
+    camera.aspect = W / H;
+    camera.updateProjectionMatrix();
+  }
+  window.addEventListener('resize', redimensionar);
+  redimensionar();
+
+  // ---------- bucle de animación ----------
+  var hudU = document.getElementById('hud-u'), hudY = document.getElementById('hud-y'), hudF = document.getElementById('hud-f');
+  var btnPausa = document.getElementById('pausa');
+  var reducir = window.matchMedia('(prefers-reduced-motion: reduce)');
+  var pausado = reducir.matches;
+  var reloj = 0, angulo = 0.55, giroHelice = 0, ultimo = performance.now(), ultimoHud = 0;
+  function marcarPausa() {
+    btnPausa.textContent = pausado ? 'Reanudar 3D' : 'Pausar 3D';
+    btnPausa.setAttribute('aria-pressed', String(pausado));
+  }
+  btnPausa.addEventListener('click', function () { pausado = !pausado; marcarPausa(); });
+  marcarPausa();
+  if (pausado) reloj = 10;   // sin movimiento: el carro queda a mitad del escalón
+
+  function cuadro(ahora) {
+    var dt = Math.min(0.05, (ahora - ultimo) / 1000);
+    ultimo = ahora;
+    if (!pausado) { reloj += dt; angulo += dt * (2 * Math.PI / 56); }
+    var k = 1 - Math.exp(-dt * 3.2);
+    enc.frac += (enc.fracObj - enc.frac) * k;
+    enc.zoom += (enc.zoomObj - enc.zoom) * k;
+
+    var e = estado(reloj % CICLO);
+    var vib = pausado ? 0 : e.giro * 0.0007 * Math.sin(ahora * 0.09);
+    var yc = yMundo(e.y) + vib;
+    carro.position.y = yc;
+    actualizarCable(yc);
+    if (!pausado) giroHelice += dt * e.giro * 70;
+    helice.rotation.y = giroHelice;
+    M.helice.opacity = 1 - 0.8 * e.giro;
+    blurMat.opacity = 0.3 * e.giro;
+    capi.rotation.z = pausado ? 0 : e.giro * 0.012 * Math.sin(ahora * 0.047);
+
+    aplicarCamara(angulo);
+    renderer.render(scene, camera);
+
+    if (ahora - ultimoHud > 100) {
+      ultimoHud = ahora;
+      hudU.textContent = Math.round(e.u);
+      hudY.textContent = e.y.toFixed(1);
+      hudF.textContent = e.fase;
+    }
+    requestAnimationFrame(cuadro);
+  }
+  requestAnimationFrame(cuadro);
+
+  window.Banco3D = {
+    encuadre: function (frac, zoom) { enc.fracObj = frac; enc.zoomObj = zoom; }
+  };
+})();
+</script>
+
+<script>
+// Arranque: lámina desde el enlace (#3) o la primera
+(function () {
+  var n = parseInt((location.hash || '').replace('#', ''), 10);
+  window.Laminas.show(isNaN(n) ? 0 : n - 1);
+})();
+</script>
+</body>
+</html>

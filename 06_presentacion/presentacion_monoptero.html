@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Etapa 1 – Modelado Dinámico del Monóptero</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body, {delimiters: [{left: '$$', right: '$$', display: true}, {left: '$', right: '$', display: false}]});"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Source+Sans+3:wght@300;400;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Source Sans 3', 'Segoe UI', Arial, sans-serif;
+      background: #e8e4df;
+      color: #1a1a1a;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .deck {
+      width: 92vw;
+      max-width: 1140px;
+      height: 84vh;
+      background: #ffffff;
+      border: 1px solid #c8c3bc;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ---- top bar ---- */
+    .topbar {
+      height: 6px;
+      background: #1b3a5c;
+      flex-shrink: 0;
+    }
+
+    .header {
+      padding: 16px 36px 10px;
+      border-bottom: 1px solid #ddd;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    .header-left {
+      font-family: 'Libre Baskerville', Georgia, serif;
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: #1b3a5c;
+    }
+
+    .header-right {
+      font-size: 0.78rem;
+      color: #777;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    /* ---- slides ---- */
+    .slide {
+      flex: 1;
+      padding: 28px 40px;
+      overflow-y: auto;
+      display: none;
+    }
+
+    .slide.active { display: block; }
+
+    /* ---- footer ---- */
+    .footer {
+      padding: 10px 36px;
+      border-top: 1px solid #ddd;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #fafaf8;
+      flex-shrink: 0;
+    }
+
+    .page-num {
+      font-family: 'Fira Code', monospace;
+      font-size: 0.82rem;
+      color: #999;
+    }
+
+    .nav { display: flex; gap: 8px; }
+
+    .nav button {
+      background: #fff;
+      border: 1px solid #bbb;
+      color: #333;
+      padding: 5px 14px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      font-family: inherit;
+      transition: background 0.15s;
+    }
+
+    .nav button:hover {
+      background: #1b3a5c;
+      color: #fff;
+      border-color: #1b3a5c;
+    }
+
+    /* ---- typography ---- */
+    .slide h2 {
+      font-family: 'Libre Baskerville', Georgia, serif;
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #1b3a5c;
+      margin-bottom: 20px;
+      padding-bottom: 6px;
+      border-bottom: 2px solid #1b3a5c;
+    }
+
+    .slide h3 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: #2a2a2a;
+      margin: 18px 0 8px;
+    }
+
+    .slide h3:first-of-type { margin-top: 0; }
+
+    .slide p, .slide li {
+      font-size: 0.97rem;
+      line-height: 1.6;
+      color: #333;
+    }
+
+    .slide ul { margin-left: 22px; margin-bottom: 12px; }
+    .slide li { margin-bottom: 6px; }
+    .slide ol { margin-left: 22px; margin-bottom: 12px; }
+    .slide ol li { margin-bottom: 6px; }
+
+    strong { color: #111; }
+    code {
+      font-family: 'Fira Code', monospace;
+      font-size: 0.88em;
+      background: #f0eeea;
+      padding: 1px 5px;
+      border-radius: 3px;
+    }
+
+    .katex-display {
+      margin: 12px 0 !important;
+      padding: 8px 12px;
+      background: #f8f6f3;
+      border-left: 3px solid #1b3a5c;
+    }
+
+    /* ---- layout helpers ---- */
+    .cols { display: grid; gap: 28px; }
+    .cols-2 { grid-template-columns: 1fr 1fr; }
+    .cols-60-40 { grid-template-columns: 1.4fr 1fr; }
+    .cols-55-45 { grid-template-columns: 1.2fr 1fr; }
+
+    .box {
+      background: #f8f6f3;
+      border: 1px solid #ddd;
+      padding: 16px 18px;
+      margin-top: 8px;
+    }
+
+    .box-accent {
+      background: #f0f4f8;
+      border: 1px solid #b8cde0;
+      padding: 16px 18px;
+      margin-top: 8px;
+    }
+
+    .box-warn {
+      background: #fdf6ee;
+      border: 1px solid #e0cba0;
+      padding: 16px 18px;
+      margin-top: 8px;
+    }
+
+    /* ---- table ---- */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+      margin-top: 8px;
+    }
+
+    th, td {
+      padding: 6px 12px;
+      text-align: left;
+      border: 1px solid #ccc;
+    }
+
+    th {
+      background: #1b3a5c;
+      color: #fff;
+      font-weight: 600;
+      font-size: 0.85rem;
+    }
+
+    tr:nth-child(even) td { background: #fafaf8; }
+    tr:last-child td { font-weight: 600; }
+
+    .fit-val {
+      color: #1b6b3a;
+      font-weight: 700;
+    }
+
+    /* ---- image placeholder ---- */
+    .img-placeholder {
+      border: 1.5px dashed #aaa;
+      background: #f5f3f0;
+      padding: 22px 16px;
+      text-align: center;
+      color: #777;
+      font-size: 0.88rem;
+      margin-top: 10px;
+    }
+
+    .img-placeholder span { display: block; font-weight: 600; color: #555; margin-top: 4px; }
+
+    /* ---- slide 1 specific ---- */
+    .cover-center {
+      text-align: center;
+      margin-top: 36px;
+    }
+
+    .cover-center .uni {
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #888;
+      margin-bottom: 18px;
+    }
+
+    .cover-center h1 {
+      font-family: 'Libre Baskerville', Georgia, serif;
+      font-size: 2rem;
+      color: #1b3a5c;
+      font-weight: 700;
+      line-height: 1.3;
+      max-width: 780px;
+      margin: 0 auto 14px;
+    }
+
+    .cover-center .sub {
+      font-size: 1.1rem;
+      color: #555;
+      margin-bottom: 32px;
+    }
+
+    .cover-obj {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      max-width: 820px;
+      margin: 0 auto;
+      text-align: left;
+    }
+  </style>
+</head>
+<body>
+
+<div class="deck">
+  <div class="topbar"></div>
+
+  <div class="header">
+    <div class="header-left" id="hdr-title">Presentación del Proyecto</div>
+    <div class="header-right">Control I &middot; Etapa 1 &middot; Unimagdalena</div>
+  </div>
+
+  <!-- ================= SLIDE 1 ================= -->
+  <div class="slide active" data-title="Presentación del Proyecto">
+    <div class="cover-center">
+      <div class="uni">Universidad del Magdalena &mdash; Programa de Ingeniería</div>
+      <h1>Caracterización Experimental y Modelado Dinámico de un Monóptero</h1>
+      <p class="sub">Planta aerodinámica de 1 GDL &middot; Tower Copter</p>
+
+      <div class="cover-obj">
+        <div class="box">
+          <h3>Objetivo general</h3>
+          <p>Modelar la dinámica vertical del monóptero alrededor de un punto de sustentación (hovering), linealizando el sistema y obteniendo una función de transferencia FOPDT.</p>
+        </div>
+        <div class="box-accent">
+          <h3>Meta de calidad</h3>
+          <p>Alcanzar un porcentaje de ajuste cuantitativo con respecto a los datos experimentales reales:</p>
+          <p style="margin-top:8px;font-size:1.15rem;font-weight:700;color:#1b3a5c;">$$\text{Fit} \geq 80\%$$</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= SLIDE 2 ================= -->
+  <div class="slide" data-title="Estructura y Componentes">
+    <h2>Estructura del Proyecto y Componentes</h2>
+    <div class="cols cols-60-40">
+      <div>
+        <h3>Arquitectura de la planta</h3>
+        <p>Sistema mecánico vertical de 1 GDL guiado por columnas lisas con carrera útil de 100 cm. El carro desliza verticalmente con baja fricción seca pero alto amortiguamiento viscoso por la interacción aerodinámica hélice-varillas.</p>
+
+        <h3>Componentes de hardware</h3>
+        <ul>
+          <li><strong>Actuador:</strong> Motor Brushless BLDC con hélice de sustentación. El PWM va de $1000\ \mu\text{s}$ (throttle 0 %) a $2000\ \mu\text{s}$ (throttle 100 %).</li>
+          <li><strong>Etapa de potencia:</strong> ESC de 30 A a 12 V. Convierte el pulso PWM en corriente trifásica al motor.</li>
+          <li><strong>Sensor:</strong> ultrasónico HC-SR04 en la base, apuntando al carro (rango útil 2–120 cm, ruido ≈ ±0.5 cm).</li>
+          <li><strong>Controlador:</strong> Arduino a ciclo determinístico $T_s = 50\ \text{ms}$ ($f_s = 20\ \text{Hz}$), serial a 115200 baud.</li>
+          <li><strong>Alimentación:</strong> Fuente conmutada 12 V / 5 A con bus GND compartido.</li>
+        </ul>
+      </div>
+      <div>
+        <div class="box-warn">
+          <h3>Seguridad y failsafe</h3>
+          <ul>
+            <li><strong>Zona muerta:</strong> 0 a 10 cm (efecto suelo + base).</li>
+            <li><strong>Carrera útil:</strong> 10 a 85 cm (rango lineal).</li>
+            <li><strong>Failsafe:</strong> Si $y(t) > 85\ \text{cm}$, Arduino fuerza PWM a $1000\ \mu\text{s}$ (motor OFF).</li>
+          </ul>
+        </div>
+        <div class="box" style="margin-top:12px">
+          <h3>Cumplimiento de Nyquist</h3>
+          <p>$f_s = 20\ \text{Hz}$. La dinámica más rápida tiene $\tau = 1.57\ \text{s}$ ($f_{-3\text{dB}} \approx 0.1\ \text{Hz}$), así que $f_s \gg 2 \cdot f_{-3\text{dB}}$. Criterio de Nyquist cumplido holgadamente.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= SLIDE 3 ================= -->
+  <div class="slide" data-title="Fundamentación Teórica">
+    <h2>Fundamentación Teórica: Sistemas de Primer Orden</h2>
+    <div class="cols cols-55-45">
+      <div>
+        <h3>Definición</h3>
+        <p>Un sistema de primer orden tiene un único polo real en la función de transferencia. La salida converge exponencialmente al estado estable, sin sobreimpulsos.</p>
+
+        <h3>Forma estándar FOPDT</h3>
+        $$G_p(s) = \frac{\Delta Y(s)}{\Delta U(s)} = \frac{K \cdot e^{-t_0 s}}{\tau s + 1}$$
+
+        <h3>Tiempos característicos ante escalón</h3>
+        <ul>
+          <li>$t_0 + \tau$: salida al $63.2\%$ ($1 - e^{-1}$).</li>
+          <li>$t_0 + 3\tau$: salida al $95\%$.</li>
+          <li>$t_0 + 5\tau$: salida al $99.3\%$ (régimen permanente).</li>
+        </ul>
+        <p style="margin-top:6px">Para nuestro sistema: $5\tau = 5 \times 1.5719 = 7.86\ \text{s}$. Los 10 s de captura garantizan que la planta alcanzó el estado estable.</p>
+      </div>
+      <div>
+        <div class="box">
+          <h3>Parámetros del modelo</h3>
+          <ul>
+            <li><strong>$K$ (ganancia):</strong> cuántos cm sube el monóptero por cada $\mu\text{s}$ de PWM adicional.</li>
+            <li><strong>$\tau$ (constante de tiempo):</strong> inercia del conjunto motor-hélice-carro. Define la velocidad de respuesta.</li>
+            <li><strong>$t_0$ (tiempo muerto):</strong> sensor ($\approx 20\ \text{ms}$) + firmware ($\approx 5\ \text{ms}$) + aceleración del rotor ($\approx 90\ \text{ms}$).</li>
+          </ul>
+        </div>
+        <div class="box-accent" style="margin-top:12px">
+          <h3>Índice de controlabilidad</h3>
+          <p>La relación $t_0/\tau$ define la dificultad de control:</p>
+          <p style="margin-top:4px">$$\frac{t_0}{\tau} = \frac{0.1188}{1.5719} = 0.076$$</p>
+          <p>Valor muy bajo ($< 0.1$): la planta es <strong>fácil de controlar</strong> con PID clásico. El retardo es despreciable frente a la inercia.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= SLIDE 4 ================= -->
+  <div class="slide" data-title="Modelo aplicado al Monóptero">
+    <h2>Implementación del Modelo al Monóptero</h2>
+    <div class="cols cols-2">
+      <div>
+        <h3>Reducción de 2.º orden a 1.er orden</h3>
+        <p>La ecuación de movimiento traslacional es:</p>
+        $$m \frac{d^2y}{dt^2} + B \frac{dy}{dt} + mg = F_t$$
+        <p>Los polos son $s_{1,2} = \frac{-B \pm \sqrt{B^2}}{2m}$ (raíces reales, sistema sobreamortiguado). Si la fricción viscosa $B$ es grande, un polo se aleja del origen y el otro domina la respuesta, comportándose como primer orden.</p>
+
+        <h3>Linealización en hovering</h3>
+        <p>El empuje es cuadrático: $F_t \propto \omega^2 \propto u^2$. Al linealizar alrededor de $u_0 = 1762\ \mu\text{s}$:</p>
+        $$\Delta F_t \approx \frac{\partial F_t}{\partial u}\bigg|_{u_0} \cdot \Delta u$$
+        <p>El escalón $\Delta u = 50\ \mu\text{s}$ representa solo el 2.8 % del rango total del ESC, garantizando que la aproximación lineal sea válida.</p>
+      </div>
+      <div>
+        <div class="box-accent">
+          <h3>Método Fit 3 (Smith &amp; Corripio)</h3>
+          <p>Respuesta normalizada al escalón:</p>
+          $$F(t) = 1 - e^{-(t - t_0)/\tau}$$
+          <ul>
+            <li>Nivel 28.3 % ($t_1$): &ensp; $t_1 - t_0 = \tau/3$</li>
+            <li>Nivel 63.2 % ($t_2$): &ensp; $t_2 - t_0 = \tau$</li>
+          </ul>
+          <p style="margin-top:10px"><strong>Ecuaciones directas:</strong></p>
+          $$\tau = 1.5\,(t_2 - t_1) \qquad t_0 = t_2 - \tau$$
+
+          <h3 style="margin-top:14px">Ventaja sobre Fit 1 y Fit 2</h3>
+          <p style="font-size:0.9rem">Fit 3 no requiere trazar la tangente en el punto de inflexión (Fit 1) ni lectura gráfica subjetiva (Fit 2). Los tiempos $t_1$ y $t_2$ se obtienen por interpolación numérica (<code>interp1</code> en MATLAB), eliminando el error humano de medición gráfica.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= SLIDE 5 ================= -->
+  <div class="slide" data-title="Metodología Experimental">
+    <h2>Metodología Experimental y Toma de Datos</h2>
+    <div class="cols cols-55-45">
+      <div>
+        <h3>Protocolo de ensayo</h3>
+        <ol>
+          <li><strong>Calibración del ESC:</strong> secuencia de armado $1000 \rightarrow 2000 \rightarrow 1000\ \mu\text{s}$ (2 s por tramo) para que el ESC reconozca pulso mínimo y máximo.</li>
+          <li><strong>Búsqueda de hovering:</strong> ajuste fino del PWM hasta $dy/dt \approx 0$ durante 5 s. Equilibrio encontrado: $u_0 = 1762\ \mu\text{s}$, $y_0 = 13.45\ \text{cm}$.</li>
+          <li><strong>Escalón determinístico:</strong> salto de $1762$ a $1812\ \mu\text{s}$ ($\Delta u = +50\ \mu\text{s}$). Muestreo uniforme a $T_s = 50\ \text{ms}$.</li>
+          <li><strong>Registro serial:</strong> captura por 10 s ($> 5\tau$), transmisión USB a 115200 baud, guardado en <code>datos_serial.csv</code>.</li>
+        </ol>
+
+        <h3 style="margin-top:14px">Detección automática del escalón</h3>
+        <p style="font-size:0.9rem">En MATLAB: <code>idx_step = find(diff(u_raw) > umbral, 1)</code>. El umbral se calcula como el 40 % del rango de $u(t)$. No depende de un instante fijo programado, haciendo el script robusto a latencias del serial.</p>
+      </div>
+      <div>
+        <div class="box">
+          <h3>Procesamiento en MATLAB</h3>
+          <ul>
+            <li><strong>Filtro de mediana</strong> (<code>medfilt1(y, 5)</code>): elimina picos atípicos sin introducir retardo de fase (a diferencia de filtros IIR que desplazarían la estimación de $t_0$).</li>
+            <li><strong>Rebase temporal:</strong> $t = 0$ en el instante del escalón. $t = t_{\text{raw}} - t_{\text{raw}}(\text{step})$.</li>
+            <li><strong>Interpolación lineal:</strong> $t_1$ y $t_2$ se calculan con <code>interp1</code> entre las dos muestras adyacentes al cruce de nivel, mejorando la precisión más allá de $T_s$.</li>
+          </ul>
+        </div>
+        <div class="box-accent" style="margin-top:12px">
+          <h3>Cálculo de $y_\infty$</h3>
+          <p style="font-size:0.9rem">Se promedia el 15 % final de las muestras ($\approx 30$ puntos) en vez de tomar una sola lectura, atenuando el ruido del sensor en el cálculo de $\Delta y$.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= SLIDE 6 ================= -->
+  <div class="slide" data-title="Simulación en Simulink">
+    <h2>Simulación del Sistema (MATLAB y Simulink)</h2>
+    <div class="cols cols-55-45">
+      <div>
+        <h3>Diagrama de bloques</h3>
+        <ul>
+          <li><strong>Step:</strong> escalón unitario en $t = 1\ \text{s}$, amplitud $\Delta u = 50\ \mu\text{s}$.</li>
+          <li><strong>Transfer Fcn:</strong> numerador $[K] = [0.4302]$, denominador $[\tau \quad 1] = [1.5719 \quad 1]$.</li>
+          <li><strong>Transport Delay:</strong> $t_0 = 0.1188\ \text{s}$. Simulink usa un buffer circular interno.</li>
+          <li><strong>Constant + Sum:</strong> se suma $y_0 = 13.45\ \text{cm}$ al incremento dinámico para obtener la altura absoluta.</li>
+          <li><strong>Scope:</strong> la salida asciende de $13.45$ a $34.96\ \text{cm}$ ($\Delta y = 21.51\ \text{cm}$).</li>
+        </ul>
+
+        <h3 style="margin-top:14px">Modelo analítico exacto</h3>
+        <p>La ecuación que reproduce Simulink es:</p>
+        $$y(t) = y_0 + K \cdot \Delta u \cdot \left(1 - e^{-(t - t_0)/\tau}\right) \cdot u_{-1}(t - t_0)$$
+        <p style="font-size:0.9rem">Ambas curvas (script <code>untitled.m</code> y diagrama Simulink) son idénticas, confirmando la correcta parametrización de bloques. La función <code>lsim</code> en MATLAB valida numéricamente lo mismo.</p>
+      </div>
+      <div>
+        <div style="text-align:center">
+          <img src="Primer grafico.png" alt="Respuesta Fit 3" style="max-width:100%;max-height:140px;border:1px solid #ccc;border-radius:4px;">
+          <p style="font-size:0.75rem;color:#888;margin-top:4px">Respuesta experimental vs. modelo FOPDT</p>
+        </div>
+        <div style="text-align:center;margin-top:10px">
+          <img src="segundo grafico.png" alt="Señal PWM" style="max-width:100%;max-height:120px;border:1px solid #ccc;border-radius:4px;">
+          <p style="font-size:0.75rem;color:#888;margin-top:4px">Señal de excitación PWM aplicada al ESC</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= SLIDE 7 ================= -->
+  <div class="slide" data-title="Resultados y Validación">
+    <h2>Resultados Experimentales y Validación</h2>
+    <div class="cols cols-60-40">
+      <div>
+        <table>
+          <thead>
+            <tr><th>Símbolo</th><th>Descripción</th><th>Valor</th><th>Unidad</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>$u_0$</td><td>PWM en hovering</td><td>1762.00</td><td>$\mu\text{s}$</td></tr>
+            <tr><td>$y_0$</td><td>Altura de sustentación</td><td>13.45</td><td>cm</td></tr>
+            <tr><td>$u_\infty$</td><td>PWM en régimen final</td><td>1812.00</td><td>$\mu\text{s}$</td></tr>
+            <tr><td>$y_\infty$</td><td>Altura final estable</td><td>34.96</td><td>cm</td></tr>
+            <tr><td>$\Delta u$</td><td>Escalón (2.8 % del rango ESC)</td><td>+50.00</td><td>$\mu\text{s}$</td></tr>
+            <tr><td>$\Delta y$</td><td>Excursión de altura</td><td>+21.51</td><td>cm</td></tr>
+            <tr><td>$K$</td><td>Ganancia estática</td><td>0.4302</td><td>cm/$\mu\text{s}$</td></tr>
+            <tr><td>$\tau$</td><td>Constante de tiempo</td><td>1.5719</td><td>s</td></tr>
+            <tr><td>$t_0$</td><td>Retardo aparente</td><td>0.1188</td><td>s</td></tr>
+            <tr><td>$t_0/\tau$</td><td>Índice de controlabilidad</td><td>0.076</td><td>—</td></tr>
+            <tr><td>$s_p$</td><td>Polo dominante (LHP)</td><td>–0.6362</td><td>rad/s</td></tr>
+            <tr><td>RMSE</td><td>Error cuadrático medio</td><td>0.7540</td><td>cm</td></tr>
+            <tr><td><strong>Fit %</strong></td><td><strong>Ajuste experimental</strong></td><td class="fit-val">85.77</td><td>%</td></tr>
+          </tbody>
+        </table>
+        <div style="margin-top:10px;">
+          $$G_p(s) = \frac{0.4302 \cdot e^{-0.1188\,s}}{1.5719\,s + 1}$$
+        </div>
+        <div class="box" style="margin-top:8px; font-size:0.85rem;">
+          <strong>Fórmula del Fit %:</strong>
+          $$\text{Fit} = \left(1 - \frac{\|y_{\text{exp}} - y_{\text{mod}}\|_2}{\|y_{\text{exp}} - \bar{y}\|_2}\right) \times 100$$
+          Mide cuánto de la variabilidad real captura el modelo (análogo al $R^2$). Un 85.77 % confirma que el FOPDT explica la mayor parte de la dinámica.
+        </div>
+      </div>
+      <div>
+        <div style="text-align:center">
+          <img src="Primer grafico.png" alt="Fit 3 con niveles" style="max-width:100%;max-height:140px;border:1px solid #ccc;border-radius:4px;">
+          <p style="font-size:0.75rem;color:#888;margin-top:4px">Cruces al 28.3 % y 63.2 % del Fit 3</p>
+        </div>
+        <div style="text-align:center;margin-top:10px">
+          <img src="Polos en el plano complejo.png" alt="Mapa de polos" style="max-width:100%;max-height:140px;border:1px solid #ccc;border-radius:4px;">
+          <p style="font-size:0.75rem;color:#888;margin-top:4px">Polo en $s = -0.6362$ (semiplano izquierdo, estable)</p>
+        </div>
+        <div class="box-accent" style="margin-top:12px;font-size:0.85rem;">
+          <strong>Estabilidad:</strong> El polo en $s = -0.6362$ está en el semiplano izquierdo (LHP). La distancia al eje $j\omega$ es $|\sigma| = 0.6362\ \text{rad/s}$, un margen de estabilidad holgado. Sin ceros finitos. Planta inherentemente estable en lazo abierto.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= SLIDE 8 ================= -->
+  <div class="slide" data-title="Conclusiones y Etapa 2">
+    <h2>Conclusiones y Proyección a la Etapa 2</h2>
+    <div class="cols cols-2">
+      <div>
+        <div class="box">
+          <h3>Hallazgos principales</h3>
+          <ul>
+            <li>Fit 3 alcanzó <strong>85.77 %</strong> con RMSE de solo 0.754 cm (< 8 mm de error promedio), superando el umbral de la guía (80 %).</li>
+            <li>La hipótesis de polo dominante se validó: respuesta puramente exponencial sin oscilaciones ni sobreimpulso.</li>
+            <li>El filtro de mediana (orden 5) eliminó picos del sensor sin introducir retardo de fase. Un filtro IIR habría desplazado la estimación de $t_0$.</li>
+            <li>El índice $t_0/\tau = 0.076$ confirma que el retardo es despreciable frente a la inercia, facilitando el diseño del controlador.</li>
+          </ul>
+        </div>
+      </div>
+      <div>
+        <div class="box-accent">
+          <h3>Etapa 2: diseño del lazo cerrado</h3>
+          <p>Con ($K$, $\tau$, $t_0$) se aplican reglas de sintonía. Ejemplo con <strong>Cohen-Coon</strong> para PID:</p>
+          $$K_p = \frac{1}{K} \cdot \frac{\tau}{t_0} \cdot \left(\frac{4}{3} + \frac{t_0}{4\tau}\right)$$
+          $$T_i = t_0 \cdot \frac{32 + 6\,(t_0/\tau)}{13 + 8\,(t_0/\tau)}$$
+          $$T_d = t_0 \cdot \frac{4}{11 + 2\,(t_0/\tau)}$$
+          <p style="margin-top:8px">Dado que $t_0/\tau \ll 1$, el sistema admite ganancia proporcional alta sin riesgo de inestabilidad. Implementación: PID digital en Arduino con $T_s = 50\ \text{ms}$.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ---- footer ---- -->
+  <div class="footer">
+    <span class="page-num" id="pg">1 / 8</span>
+    <div class="nav">
+      <button onclick="go(-1)">&larr; Anterior</button>
+      <button onclick="go(1)">Siguiente &rarr;</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  let cur = 0;
+  const ss = document.querySelectorAll('.slide');
+  const hdr = document.getElementById('hdr-title');
+  const pg = document.getElementById('pg');
+
+  function show(i) {
+    i = Math.max(0, Math.min(i, ss.length - 1));
+    ss[cur].classList.remove('active');
+    cur = i;
+    ss[cur].classList.add('active');
+    hdr.textContent = ss[cur].dataset.title;
+    pg.textContent = (cur + 1) + ' / ' + ss.length;
+  }
+
+  function go(d) { show(cur + d); }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') go(1);
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') go(-1);
+  });
+
+  show(0);
+</script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+#pragma once
+// Plantilla de configuración: cópiala a monocoptero_esp32/config.h y edítala.
+
+// ── WiFi ─────────────────────────────────────────────────────────
+#define USE_WIFI_STA      // la ESP32 se une a tu router
+// #define USE_WIFI_AP    // la ESP32 crea su propia red
+
+#define WIFI_STA_SSID "TU_RED"
+#define WIFI_STA_PASS "TU_CLAVE"
+
+#define WIFI_AP_SSID "Monocoptero-Lab"
+#define WIFI_AP_PASS "monocoptero2026"   // mínimo 8 caracteres (WPA2)
+#define WIFI_AP_CHANNEL 6
+
+#define MDNS_HOSTNAME "monocoptero"      // http://monocoptero.local
+
+// ── Pines ────────────────────────────────────────────────────────
+// ⚠ ECHO del HC-SR04 a 5 V → divisor 1 kΩ / 2 kΩ hacia GPIO14 (la ESP32 es de 3.3 V).
+// ⚠ GPIO12 es pin de arranque: si la placa no arranca, mueve TRIG a GPIO26.
+#define PIN_ESC  27
+#define PIN_TRIG 12
+#define PIN_ECHO 14
+
+// ── ESC ──────────────────────────────────────────────────────────
+#define ESC_MIN_US 1000
+#define ESC_MAX_US 2000
+#define ESC_CALIBRAR 1
+
+// ── Modo simulado (sin banco físico) ────────────────────────────
+// #define MODO_SIMULADO
+
+// ── Control multi-cliente ────────────────────────────────────────
+#define PERMITIR_MULTI_CONTROL 1

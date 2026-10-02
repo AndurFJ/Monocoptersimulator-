@@ -1,0 +1,77 @@
+#pragma once
+
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  config.h.example — TEMPLATE de configuración (firmware)     ║
+// ║                                                              ║
+// ║  Copia este archivo como "firmware/src/config.h" y edita     ║
+// ║  tus valores. src/config.h NO se sube al repo (.gitignore).  ║
+// ║  (Para Arduino IDE, copia también como "config.h" junto al    ║
+// ║   .ino — ver firmware/ARDUINO_IDE.md).                       ║
+// ╚══════════════════════════════════════════════════════════════╝
+
+// ── Modo WiFi ──────────────────────────────────────────────────
+// Descomenta UNO de los dos modos:
+#define USE_WIFI_STA
+// #define USE_WIFI_AP
+
+// Credenciales STA
+#define WIFI_STA_SSID     "TU_RED_WIFI"
+#define WIFI_STA_PASS     "TU_CONTRASEÑA"
+
+// Credenciales AP (siempre WPA2, mínimo 8 caracteres)
+#define WIFI_AP_SSID      "Monocoptero-Lab"
+#define WIFI_AP_PASS      "monocoptero2026"
+#define WIFI_AP_CHANNEL   6
+
+// ── mDNS ────────────────────────────────────────────────────────
+#define MDNS_HOSTNAME     "monocoptero"
+
+// ── Pines del hardware ─────────────────────────────────────────
+#define PIN_ESC           27
+#define PIN_TRIG          12
+#define PIN_ECHO          14
+
+// ── ESC ─────────────────────────────────────────────────────────
+#define ESC_MIN_US        1000
+#define ESC_MAX_US        2000
+// Secuencia de calibración al arrancar (min→max→min). 0 si ya calibrado.
+#define ESC_ARM_SEQUENCE  1
+
+// ── Sensor ──────────────────────────────────────────────────────
+#define SENSOR_TIMEOUT_US 30000
+#define FAILSAFE_CM       85.0
+
+// ── Muestreo ────────────────────────────────────────────────────
+#define SAMPLE_INTERVAL_MS 50
+
+// ── Modo Mock (sin banco físico: simula la FOPDT) ──────────────
+// #define UART_MOCK_MODE
+
+// ── Modelo FOPDT discreto (Ts = 50 ms) ─────────────────────────
+#define MOCK_FOPDT_A 0.9687f
+#define MOCK_FOPDT_B 0.01347f
+#define MOCK_FOPDT_DELAY_SAMPLES 3
+
+// ── PID ─────────────────────────────────────────────────────────
+#define DEFAULT_KP        2.0
+#define DEFAULT_KI        0.5
+#define DEFAULT_KD        0.1
+#define DEFAULT_SETPOINT_CM 30.0
+#define PWM_HOVER_US      1762
+#define PID_OUTPUT_MIN    -300
+#define PID_OUTPUT_MAX    238
+#define PID_INTEGRAL_MAX  200.0
+
+// ── Escalón ─────────────────────────────────────────────────────
+#define STEP_U0           1762
+#define STEP_DELTA_U      50
+#define STEP_HOVER_MS     5000
+#define STEP_TOTAL_MS     15000
+
+// ── WebSocket ───────────────────────────────────────────────────
+#define WS_CLEANUP_INTERVAL_MS  1000
+#define WS_MAX_CLIENTS          8
+#define ALLOW_MULTI_CONTROL     1   // 1 = multi-control · 0 = solo el primer cliente
+
+// ── Sincronización por USB ──────────────────────────────────────
+#define SERIAL_STATUS_JSON      1   // 1 = eco de estado JSON por USB · 0 = solo CSV

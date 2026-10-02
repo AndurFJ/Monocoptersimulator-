@@ -1,36 +1,29 @@
-# Logs
-logs
+# Credenciales WiFi del firmware (NUNCA subir: el repositorio es público).
+# Para compilar: copiar 04_firmware/esp32/config.h.example a monocoptero_esp32/config.h
+04_firmware/esp32/monocoptero_esp32/config.h
+_archivo/simulador_firmware_anterior/firmware/src/config.h
+
+# Dependencias y compilados (se regeneran)
+node_modules/
+.pio/
+dist/
+__pycache__/
+*.pyc
+
+# Archivos generados para subir a Overleaf (se rehacen desde 05_informe_ieee/)
+*.zip
+
+# MATLAB / LaTeX temporales
+*.asv
+slprj/
+*.slxc
+*.aux
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
+*.synctex.gz
 
-node_modules
-dist
-dist-ssr
-*.local
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
+# Sistema y editores
+.vscode/
+Thumbs.db
+desktop.ini
+~$*
 .DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-
-# Firmware ESP32 — credenciales WiFi (NUNCA subir al repo)
-firmware/src/config.h
-firmware/config.h
-
-# PlatformIO
-firmware/.pio/
-firmware/.vscode/
-
-# Firmware — archivos del simulador compilado (se regeneran con deploy_frontend)
-firmware/data/*
-!firmware/data/README.txt

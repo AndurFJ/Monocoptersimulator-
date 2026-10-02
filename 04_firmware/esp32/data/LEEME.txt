@@ -1,0 +1,5 @@
+Esta carpeta es la imagen de LittleFS que la ESP32 sirve en http://monocoptero.local
+Se llena con la interfaz compilada del simulador:
+    PowerShell:  .\scripts\deploy_frontend.ps1
+    Git Bash:    bash scripts/deploy_frontend.sh
+Luego súbela:  pio run -t uploadfs   (o el plugin "LittleFS Upload" del Arduino IDE)

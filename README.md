@@ -1,75 +1,33 @@
-# Monocoptersimulator-
+# Control I — Monocóptero (Tower Copter) de 1 GDL
 
-Simulador 3D interactivo y plataforma de prueba para Monocóptero de 1 Grado de Libertad (1-GDL).
+Universidad del Magdalena · Control Análogo · Docente: Ing. Jordan Dallan Guillot Fula, PhD (c)
 
-## 🚀 Características
-- **Modelado 3D Fiel**: Banco de pruebas procedural con Three.js (estructura de madera, guías de acero, resortes, motor brushless, hélice naranja, ESC, batería LiPo, PCB y sensores).
-- **Física de 1-GDL**: Dinámica de empuje, gravedad, amortiguamiento, fricción y colisión con resortes.
-- **Control**: Modos manual y PID con ajuste interactivo de ganancias ($K_p, K_i, K_d$) y feedforward $u_0$.
-- **Instrumentación**: Gráficas en tiempo real con uPlot y HUD con telemetría en vivo.
-- **Reproducción**: Carga de ensayos reales desde Excel/CSV (columnas y unidades detectadas automáticamente).
-- **Serial en vivo**: Lectura directa del microcontrolador con Web Serial (Chrome/Edge).
+Modelo identificado (Fit 3, Smith & Corripio):
 
-## 🛠️ Tecnologías
-- **Vite + TypeScript**
-- **Three.js** (Renderizado 3D y OrbitControls)
-- **uPlot** (Visualización de datos en tiempo real)
-- **Anime.js** (Transiciones de UI)
-- **SheetJS** (Lectura de Excel/CSV)
-- **Vitest** (Tests del modelo físico y los parsers)
+    Gp(s) = 0.4302 · e^(−0.1188 s) / (1.5719 s + 1)   [cm/µs]     Fit = 85.77 %, RMSE = 0.754 cm
+    punto de operación: u0 = 1762 µs, y0 = 13.45 cm, escalón Δu = +50 µs, Ts = 50 ms
 
-## 💻 Ejecución local
-```bash
-npm install
-npm run dev     # servidor de desarrollo
-npm test        # tests
-npm run build   # build de producción en dist/
-```
+## Carpetas
 
-## 🎮 Uso
-- **Espacio**: iniciar/pausar · **R**: reiniciar.
-- **Simulación**: elige PID (mueve la altura objetivo) o PWM manual.
-- **Reproducción**: carga un `.xlsx`/`.csv` con columnas de tiempo, altura y PWM
-  (p.ej. `Tiempo (ms)`, `Distancia (cm)`, `PWM`). Si la unidad de altura se detecta mal, fórzala en el selector.
-- **Serial**: indica los baudios y el orden de columnas de cada línea (p.ej. `t, altura, pwm`).
-  También se aceptan líneas con etiquetas: `h:12.3,pwm:1500`.
+| Carpeta | Contenido |
+|---|---|
+| `01_guia/` | Guía del laboratorio, guion de la exposición y plan del Hito 2 |
+| `02_datos/` | Ensayo del escalón del 13/09/2026 (`.csv` y `.xlsx` originales) y ensayos con ESP32 del 01/10/2026 |
+| `03_matlab/` | `IdentificacionFIT3.m`, `Polosmonocopter.m`, `ValidacionSimulink.m`, `ComparacionEnsayos.m`, `simulinkdelsistema.slx` y `figuras/` |
+| `04_firmware/` | Firmware **Arduino Uno** y **ESP32** + protocolo (`PROTOCOLO.md`) |
+| `05_informe_ieee/` | Informe IEEE del Hito 2 (`informe_ieee.tex` + `figuras/`) |
+| `06_presentacion/` | `presentacion_hito2/` (presentación con el banco en 3D) y las presentaciones `.pptx` anteriores |
+| `07_adquisicion_python/` | Servidor FastAPI de adquisición por COM3 (`server.py`) |
+| `Simulador/` | Simulador 3D web (Vite + TypeScript + Three.js) |
+| `_archivo/` | Versiones anteriores reemplazadas (no se usan) |
 
-### 📈 Exportar a PID Tuner (MATLAB)
-Mientras la simulación o la conexión serial está en marcha se graba todo lo recibido. El botón
-**⬇ Excel para PID Tuner** descarga un `.xlsx` con tres hojas:
+**Para retomar el trabajo con el prototipo armado: ver `PLAN_CONTINUACION.md`.**
 
-- `PID_Tuner`: datos remuestreados a paso constante Ts (PID Tuner lo exige). Columnas `t_s`, `u_pwm`, `y_cm`, `u_norm`, `y_m`.
-- `Datos_crudos`: las muestras tal como llegaron.
-- `Info`: Ts, duración, jitter de las tramas y el código para importarlo:
+## Uso rápido
 
-```matlab
-T = readtable('ensayo_serial_....xlsx', 'Sheet', 'PID_Tuner');
-Ts = T.t_s(2) - T.t_s(1);
-datos = iddata(T.y_cm, T.u_pwm, Ts);
-pidTuner   % Plant > Identify New Plant > Import > datos
-```
-
-Cada conexión nueva, **Reiniciar** o cambiar de pestaña de modo empieza una grabación nueva.
-
-Las constantes del banco y de la planta identificada están en `src/physics/constants.ts`.
-
-## 🔌 Firmware (Arduino Uno y ESP32)
-
-El firmware vive fuera de este repositorio, en `../04_firmware/` (ver `../04_firmware/PROTOCOLO.md`):
-
-- `arduino_uno/monocoptero_uno/` — banco por USB (modo **Serial**).
-- `esp32/monocoptero_esp32/` — USB + WiFi; sirve este simulador desde LittleFS en
-  `http://monocoptero.local` (modo **WiFi**). Para actualizar la interfaz en la placa:
-  `../04_firmware/esp32/scripts/deploy_frontend.ps1` y luego `pio run -t uploadfs`.
-
-Ambos usan el mismo protocolo, el mismo filtro del HC-SR04 y el mismo PID que la simulación
-(`src/physics/SensorFilter.ts`, `src/physics/PIDController.ts`), y envían la telemetría
-`tiempo_ms,pwm_us,altura_cm,crudo_cm,setpoint_cm` cada 50 ms, también con el motor apagado.
-
-### Simulación = banco
-
-La simulación usa la **planta identificada** (`src/physics/IdentifiedPlant.ts`):
-Gp(s) = 0.4302 e^(−0.1188 s)/(1.5719 s + 1) alrededor de (1762 µs, 13.45 cm), con el carro
-apoyado en la base (≈ 11 cm) por debajo del PWM de despegue y tope a 100 cm. El sensor simulado
-incluye ruido y ecos falsos del travesaño, y el failsafe actúa igual que en el firmware (85 cm).
-Las ganancias del PID están en unidades del banco (µs/cm), así que valen tal cual en el prototipo.
+- **MATLAB**: abrir `03_matlab/IdentificacionFIT3.m` y ejecutar (lee `02_datos/` solo). Después `Polosmonocopter.m`, `ValidacionSimulink.m` y `ComparacionEnsayos.m`. Cada script explica qué hace con `help NombreDelScript`.
+- **Simulador**: `cd Simulador && npm install && npm run dev` (abrir en Chrome/Edge para el modo Serial).
+- **Firmware**: ver `04_firmware/PROTOCOLO.md`. Para el ESP32, copiar `04_firmware/esp32/config.h.example` como `04_firmware/esp32/monocoptero_esp32/config.h` y poner el nombre y la clave del WiFi (ese archivo no se sube al repositorio).
+- **Informe**: subir `05_informe_ieee/` a Overleaf y compilar `informe_ieee.tex` (pdfLaTeX).
+- **Presentación del Hito 2**: abrir `06_presentacion/presentacion_hito2/index.html` en Chrome o Edge (funciona sin internet). Flechas o clic para avanzar, `F` pantalla completa, `P` pausa el 3D.
+- **Presentaciones anteriores**: los scripts `.py` se ejecutan desde `06_presentacion/`.
