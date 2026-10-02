@@ -24,8 +24,17 @@ import { SPRING_BASE_Y, CARRIAGE_BOTTOM_OFFSET, carriageYForHeight } from './geo
 /** Mitad del alto de las tapas de goma de los resortes */
 const SPRING_CAP_HALF = 0.007;
 
-/** Constante de tiempo del suavizado visual del carro [s] */
-const SMOOTHING_TAU = 0.03;
+/**
+ * Frecuencia natural del seguidor visual del carro [rad/s].
+ * La altura llega a 20 Hz (una muestra del sensor cada 50 ms); el carro la sigue
+ * como un sistema de 2.º orden críticamente amortiguado: se mueve con inercia,
+ * sin sobrepaso y sin "teletransportarse" entre muestras. ω = 18 rad/s ⇒ ~0.2 s
+ * para llegar, mucho más rápido que la planta (τ = 1.57 s), así que no la falsea.
+ */
+const FOLLOW_OMEGA = 18;
+
+/** Paso máximo de integración del seguidor [s] */
+const FOLLOW_SUBSTEP = 0.004;
 
 /**
  * Velocidad de giro que se dibuja [rad/s]. Un brushless real gira a miles de
@@ -56,6 +65,8 @@ export class SceneManager {
   private targetHeight = SPRING_ENGAGE_HEIGHT_M;
   private targetPwm = 0;
   private shownHeight = SPRING_ENGAGE_HEIGHT_M;
+  /** Velocidad del carro mostrado [m/s] (estado del seguidor) */
+  private shownVelocity = 0;
   /** Velocidad del rotor mostrada ∈ [0,1] (sigue al PWM con la inercia del motor) */
   private rotorSpeed = 0;
   private setpointShown: number | null = null;
@@ -185,6 +196,7 @@ export class SceneManager {
   snapTo(height: number, pwm = 0): void {
     this.setTelemetry(height, pwm);
     this.shownHeight = height;
+    this.shownVelocity = 0;
     this.rotorSpeed = normalizePwm(pwm);
     this.update(height, pwm, 0);
   }
@@ -246,14 +258,25 @@ export class SceneManager {
     this.clock.update();
     const dt = Math.min(this.clock.getDelta(), 0.1);
 
-    // Suavizado exponencial: la física va a 50 Hz y el monitor a 60+ Hz
-    const alpha = 1 - Math.exp(-dt / SMOOTHING_TAU);
-    this.shownHeight += (this.targetHeight - this.shownHeight) * alpha;
+    this.follow(dt);
     this.update(this.shownHeight, this.targetPwm, dt);
 
     this.cameraRig.update();
     this.renderer.render(this.scene, this.cameraRig.camera);
   };
+
+  /** Seguidor críticamente amortiguado: ẍ = −2ω·ẋ − ω²·(x − x_objetivo) */
+  private follow(dt: number): void {
+    const target = Math.max(H_MIN, Math.min(this.targetHeight, H_MAX));
+    const n = Math.max(1, Math.ceil(dt / FOLLOW_SUBSTEP));
+    const h = dt / n;
+    const w = FOLLOW_OMEGA;
+    for (let i = 0; i < n; i++) {
+      const acc = -2 * w * this.shownVelocity - w * w * (this.shownHeight - target);
+      this.shownVelocity += acc * h;
+      this.shownHeight += this.shownVelocity * h;
+    }
+  }
 
   /** Detener el loop y liberar recursos */
   dispose(): void {

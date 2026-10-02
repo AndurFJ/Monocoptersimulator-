@@ -22,3 +22,15 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Firmware ESP32 — credenciales WiFi (NUNCA subir al repo)
+firmware/src/config.h
+firmware/config.h
+
+# PlatformIO
+firmware/.pio/
+firmware/.vscode/
+
+# Firmware — archivos del simulador compilado (se regeneran con deploy_frontend)
+firmware/data/*
+!firmware/data/README.txt

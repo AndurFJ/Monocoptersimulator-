@@ -74,10 +74,10 @@ describe('parseTable', () => {
     expect(skipped).toBe(1);
   });
 
-  it('sin columna de tiempo usa el periodo de muestreo', () => {
+  it('sin columna de tiempo usa el periodo de muestreo del banco (Ts = 50 ms)', () => {
     const rows = [['altura', 'pwm'], [10, 1000], [11, 1000], [12, 1000]];
     const { samples } = parseTable(rows);
-    expect(samples[2].t).toBeCloseTo(0.04);
+    expect(samples[2].t).toBeCloseTo(0.1);
   });
 
   it('permite forzar la unidad de altura', () => {
@@ -101,19 +101,34 @@ describe('parseSerialLine', () => {
   const cols = parseColumnSpec('altura, pwm');
 
   it('formato numérico según columnas', () => {
-    expect(parseSerialLine('12.5,1500\r', cols, 'cm')).toEqual({ t: null, height: 0.125, pwm: 1500, setpoint: undefined });
+    expect(parseSerialLine('12.5,1500\r', cols, 'cm')).toEqual({ t: null, height: 0.125, raw: undefined, pwm: 1500, setpoint: undefined });
     expect(parseSerialLine('12.5 1500', cols, 'cm')?.pwm).toBe(1500);
   });
 
   it('formato con etiquetas en cualquier orden', () => {
     const p = parseSerialLine('pwm:1400, h:20, ms=2500', cols, 'cm');
-    expect(p).toEqual({ t: 2.5, height: 0.2, pwm: 1400, setpoint: undefined });
+    expect(p).toEqual({ t: 2.5, height: 0.2, raw: undefined, pwm: 1400, setpoint: undefined });
   });
 
   it('ignora líneas de log', () => {
     expect(parseSerialLine('Iniciando ESC...', cols, 'cm')).toBeNull();
     expect(parseSerialLine('', cols, 'cm')).toBeNull();
     expect(parseSerialLine('12', cols, 'cm')).toBeNull();
+  });
+
+  it('trama de los firmwares: tiempo_ms,pwm_us,altura_cm,crudo_cm,setpoint_cm', () => {
+    const fw = parseColumnSpec('ms, pwm, altura, crudo, setpoint');
+    expect(parseSerialLine('12000,1780,30.25,31.10,30.0', fw, 'cm')).toEqual({
+      t: 12, height: 0.3025, raw: 0.311, pwm: 1780, setpoint: 0.3,
+    });
+    // -1 = sin eco / fuera de PID
+    const idle = parseSerialLine('500,1000,11.00,-1.00,-1.0', fw, 'cm');
+    expect(idle?.raw).toBeUndefined();
+    expect(idle?.setpoint).toBeUndefined();
+    // Firmware viejo de 3 columnas con la misma configuración
+    expect(parseSerialLine('5002,1812,16.5', fw, 'cm')?.height).toBeCloseTo(0.165);
+    // Avisos del firmware
+    expect(parseSerialLine('# failsafe: altura >= 85 cm', fw, 'cm')).toBeNull();
   });
 
   it('parseColumnSpec valida los nombres', () => {

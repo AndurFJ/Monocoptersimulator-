@@ -43,6 +43,7 @@ const REDRAW_MS = 50;
 
 const COLORS = {
   height: '#4f8cff',
+  raw: 'rgba(148, 152, 168, 0.75)',
   setpoint: '#fbbf24',
   pwm: '#ff6b35',
   error: '#f87171',
@@ -58,6 +59,7 @@ type Col = (number | null)[];
 interface Buffers {
   t: number[];
   height: Col;
+  raw: Col;
   setpoint: Col;
   pwm: Col;
   error: Col;
@@ -67,7 +69,7 @@ interface Buffers {
 }
 
 function emptyBuffers(): Buffers {
-  return { t: [], height: [], setpoint: [], pwm: [], error: [], p: [], i: [], d: [] };
+  return { t: [], height: [], raw: [], setpoint: [], pwm: [], error: [], p: [], i: [], d: [] };
 }
 
 function axis(digits: number, extra: Partial<uPlot.Axis> = {}): uPlot.Axis {
@@ -102,7 +104,8 @@ const SPECS: ChartSpec[] = [
     key: 'height',
     title: 'Altura [cm]',
     legend: [
-      { label: 'Medida', color: COLORS.height },
+      { label: 'Sensor (filtrada)', color: COLORS.height },
+      { label: 'Crudo', color: COLORS.raw, dashed: true },
       { label: 'Objetivo', color: COLORS.setpoint, dashed: true },
       { label: 'Zona inestable', color: 'rgba(248, 113, 113, 0.5)', band: true },
     ],
@@ -110,7 +113,7 @@ const SPECS: ChartSpec[] = [
   { key: 'pwm', title: 'PWM [µs]', legend: [{ label: 'Comando', color: COLORS.pwm }] },
   {
     key: 'pid',
-    title: 'Error [cm] · términos PID',
+    title: 'Error [cm] · términos PID [µs]',
     legend: [
       { label: 'Error', color: COLORS.error },
       { label: 'P', color: COLORS.p },
@@ -176,10 +179,15 @@ export class ChartsPanel {
 
     make('height', {
       ...base(),
-      series: [{}, series('Altura', COLORS.height), series('Objetivo', COLORS.setpoint, [6, 4])],
+      series: [
+        {},
+        series('Altura', COLORS.height),
+        { label: 'Crudo', stroke: COLORS.raw, width: 0, points: { show: true, size: 3, fill: COLORS.raw, stroke: COLORS.raw } },
+        series('Objetivo', COLORS.setpoint, [6, 4]),
+      ],
       axes: [timeAxis(), axis(0)],
       hooks: { drawClear: [zoneBands] },
-    }, 3);
+    }, 4);
 
     make('pwm', {
       ...base(),
@@ -214,6 +222,7 @@ export class ChartsPanel {
 
     b.t.push(s.t);
     b.height.push(s.height * 100);
+    b.raw.push(s.raw !== undefined ? s.raw * 100 : null);
     b.setpoint.push(s.setpoint !== undefined ? s.setpoint * 100 : null);
     b.pwm.push(s.pwm);
     b.error.push(s.error !== undefined ? s.error * 100 : null);
@@ -274,7 +283,7 @@ export class ChartsPanel {
 
     // setData re-autoescala Y; luego se fija X a la ventana deslizante
     const data: [uPlot, uPlot.AlignedData][] = [
-      [this.charts.height, [b.t, b.height, b.setpoint] as uPlot.AlignedData],
+      [this.charts.height, [b.t, b.height, b.raw, b.setpoint] as uPlot.AlignedData],
       [this.charts.pwm, [b.t, b.pwm] as uPlot.AlignedData],
       [this.charts.pid, [b.t, b.error, b.p, b.i, b.d] as uPlot.AlignedData],
     ];

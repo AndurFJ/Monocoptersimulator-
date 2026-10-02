@@ -1,75 +1,88 @@
 /**
- * PIDController — controlador PID discreto.
+ * PIDController — el mismo PID que corre en el firmware (Arduino Uno / ESP32).
  *
- * spec.md §6:
- *   e[k]  = setpoint − height_medida[k]
- *   I[k]  = clamp(I[k-1] + e[k]·dt, -I_max, I_max)   // anti-windup
- *   D[k]  = (e[k] − e[k-1]) / dt
- *   u[k]  = clamp(Kp·e[k] + Ki·I[k] + Kd·D[k], 0, 1)
+ * Unidades del banco: altura en cm, salida en µs de PWM.
+ *   e[k] = sp − y[k]                                   [cm]
+ *   P    = Kp·e                                         Kp [µs/cm]
+ *   I   += Ki·e·Ts   (solo si no empuja hacia la saturación; |I| ≤ I_max)
+ *   D    = −Kd·ẏ_f   (derivada de la MEDIDA, filtrada: sin "derivative kick")
+ *   u    = clamp(u0 + P + I + D, u_min, u_max)          [µs]
  *
- * Extensión: `feedforward` (u₀) se suma antes de saturar. Con u₀ = 0 el
- * controlador es exactamente el de la spec; con u₀ ≈ throttle de hover
- * el PID solo corrige alrededor del punto de equilibrio.
+ * u0 es el PWM de equilibrio (feedforward): el PID solo corrige alrededor
+ * del punto de operación identificado.
  */
 
 export interface PIDOutput {
-  /** Throttle saturado ∈ [0, 1] */
+  /** PWM saturado [µs] */
   output: number;
+  /** Términos individuales [µs] */
   p: number;
   i: number;
   d: number;
+}
+
+export interface PIDLimits {
+  uMin: number;
+  uMax: number;
+  iMax: number;
+  /** Peso de la derivada nueva en su filtro (1 = sin filtro) */
+  dFilter: number;
 }
 
 export class PIDController {
   kp: number;
   ki: number;
   kd: number;
+  /** Periodo de muestreo [s] */
   dt: number;
-  iMax: number;
+  /** PWM de equilibrio [µs] */
   feedforward: number;
+  readonly limits: PIDLimits;
 
   private integral = 0;
-  private prevError: number | null = null;
+  private prevMeasure: number | null = null;
+  private dFiltered = 0;
 
-  constructor(
-    kp: number,
-    ki: number,
-    kd: number,
-    dt: number,
-    iMax: number,
-    feedforward = 0,
-  ) {
+  constructor(kp: number, ki: number, kd: number, dt: number, feedforward: number, limits: PIDLimits) {
     this.kp = kp;
     this.ki = ki;
     this.kd = kd;
     this.dt = dt;
-    this.iMax = iMax;
     this.feedforward = feedforward;
+    this.limits = limits;
   }
 
-  /** Integral acumulada (sin multiplicar por Ki) */
+  /** Término integral acumulado [µs] */
   get integralState(): number {
     return this.integral;
   }
 
-  /** Calcular la salida del PID dado el error actual */
-  update(error: number): PIDOutput {
-    this.integral = clamp(this.integral + error * this.dt, -this.iMax, this.iMax);
-    // En la primera muestra no hay error previo: D = 0 evita el "derivative kick"
-    const derivative = this.prevError === null ? 0 : (error - this.prevError) / this.dt;
-    this.prevError = error;
+  /** Calcular el PWM [µs] para un setpoint y una medida en cm */
+  update(setpointCm: number, measuredCm: number): PIDOutput {
+    const { uMin, uMax, iMax, dFilter } = this.limits;
+    const error = setpointCm - measuredCm;
+    // Primera muestra: sin historia, derivada 0
+    const rate = this.prevMeasure === null ? 0 : (measuredCm - this.prevMeasure) / this.dt;
+    this.prevMeasure = measuredCm;
+    this.dFiltered += dFilter * (rate - this.dFiltered);
 
     const p = this.kp * error;
-    const i = this.ki * this.integral;
-    const d = this.kd * derivative;
-    const output = clamp(this.feedforward + p + i + d, 0, 1);
-    return { output, p, i, d };
+    const d = -this.kd * this.dFiltered;
+    const unsat = this.feedforward + p + this.integral + d;
+    const pushingUp = unsat >= uMax && error > 0;
+    const pushingDown = unsat <= uMin && error < 0;
+    if (!pushingUp && !pushingDown) {
+      this.integral = clamp(this.integral + this.ki * error * this.dt, -iMax, iMax);
+    }
+    const output = clamp(this.feedforward + p + this.integral + d, uMin, uMax);
+    return { output, p, i: this.integral, d };
   }
 
-  /** Resetear el estado interno (integral acumulada, error previo) */
+  /** Resetear el estado interno (integral, derivada y medida previa) */
   reset(): void {
     this.integral = 0;
-    this.prevError = null;
+    this.prevMeasure = null;
+    this.dFiltered = 0;
   }
 }
 

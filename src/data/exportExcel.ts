@@ -11,6 +11,7 @@ const SOURCE_LABELS: Record<string, string> = {
   simulacion: 'Simulación',
   serial: 'Serial en vivo',
   reproduccion: 'Reproducción',
+  escalon: 'Ensayo de escalón automático (banco real)',
 };
 
 function fileStamp(d: Date): string {

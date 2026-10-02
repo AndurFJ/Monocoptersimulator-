@@ -2,7 +2,8 @@
  * Hud — instrumento flotante superpuesto sobre el canvas 3D.
  *
  * Muestra el estado (en marcha / pausado / estable) con el tiempo, la altura
- * en grande con una barra que marca el objetivo, el error y el PWM.
+ * que mide el sensor en grande (filtrada como en el firmware) con su lectura
+ * cruda debajo, una barra que marca el objetivo, el error y el PWM.
  */
 
 import type { DataMode, TelemetrySample } from '../data/types';
@@ -11,22 +12,25 @@ import { H_MAX, DEAD_ZONE_FRACTION, UNSTABLE_ZONE_FRACTION } from '../physics/co
 import { zoneOf, ZONE_LABELS } from '../physics/zones';
 import { flash } from './animations';
 
-/** Refresco del texto del HUD: más rápido no se puede leer */
-const UPDATE_INTERVAL_MS = 100;
+/** Refresco del texto del HUD [ms]: 20 Hz, una vez por muestra del sensor */
+const UPDATE_INTERVAL_MS = 50;
 
 export const MODE_LABELS: Record<DataMode, string> = {
   simulacion: 'Simulación',
   reproduccion: 'Reproducción',
   serial: 'Serial en vivo',
+  wifi: 'WiFi/ESP32 en vivo',
 };
 
-export type HudStatus = 'paused' | 'running' | 'settled' | 'live';
+export type HudStatus = 'paused' | 'running' | 'settled' | 'live' | 'connecting' | 'failsafe';
 
 const STATUS_LABELS: Record<HudStatus, string> = {
   paused: 'Pausado',
   running: 'En marcha',
-  settled: 'Estable',
-  live: 'En vivo',
+  settled: 'HOVERING',
+  live: 'CONECTADO',
+  connecting: 'CONECTANDO…',
+  failsafe: 'FAILSAFE',
 };
 
 const pct = (v: number) => `${Math.max(0, Math.min(100, v * 100)).toFixed(1)}%`;
@@ -45,8 +49,9 @@ export class Hud {
       </div>
       <div class="hud-mode" data-hud="mode">—</div>
 
-      <div class="hud-label hud-label-row">Altura <span class="zone-tag" data-hud="zone" hidden></span></div>
+      <div class="hud-label hud-label-row">Altura · sensor <span class="zone-tag" data-hud="zone" hidden></span></div>
       <div class="hud-big"><span data-hud="height">—</span><small>cm</small></div>
+      <div class="hud-raw"><span>crudo</span> <b data-hud="raw">—</b> <span class="sensor-tag" data-hud="sensor" hidden>⚠ sin eco</span></div>
       <div class="gauge gauge-zones" aria-hidden="true"
         style="--dz: ${DEAD_ZONE_FRACTION * 100}%; --uz: ${UNSTABLE_ZONE_FRACTION * 100}%">
         <div class="gauge-fill" data-hud="height-bar"></div>
@@ -95,6 +100,8 @@ export class Hud {
   clear(): void {
     this.pending = null;
     this.el.height.textContent = '—';
+    this.el.raw.textContent = '—';
+    this.el.sensor.hidden = true;
     this.el.pwm.textContent = '—';
     this.el['pwm-pct'].textContent = '—';
     this.el.time.textContent = '0.0 s';
@@ -110,6 +117,8 @@ export class Hud {
     if (!s) return;
     const e = this.el;
     e.height.textContent = (s.height * 100).toFixed(1);
+    e.raw.textContent = s.raw === undefined ? '—' : `${(s.raw * 100).toFixed(1)} cm`;
+    e.sensor.hidden = s.sensorOk !== false;
     const zone = zoneOf(s.height);
     e.zone.hidden = zone === 'util';
     e.zone.dataset.zone = zone;

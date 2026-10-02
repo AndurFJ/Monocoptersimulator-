@@ -57,21 +57,23 @@ describe('hojas de Excel', () => {
   });
 
   it('Datos_crudos omite setpoint si la fuente no lo da', () => {
-    const rows = rawRows([s(5, 0.1, 1000), s(5.02, 0.11, 1010)]);
+    const rows = rawRows([s(5, 0.2, 1000), s(5.02, 0.21, 1010)]);
     expect(rows[0]).toEqual(['t_s', 'altura_cm', 'pwm', 'zona']);
-    expect(rows[2]).toEqual([0.02, 11, 1010, 'util']);
+    expect(rows[2]).toEqual([0.02, 21, 1010, 'util']);
   });
 });
 
 describe('zonas', () => {
-  it('clasifica por fracción del recorrido', () => {
+  it('clasifica según las zonas del banco (12 cm / 85 cm)', () => {
     expect(zoneOf(0.02)).toBe('muerta');
+    expect(zoneOf(0.11)).toBe('muerta'); // carro apoyado en los resortes
     expect(zoneOf(0.4)).toBe('util');
-    expect(zoneOf(0.7)).toBe('inestable');
+    expect(zoneOf(0.84)).toBe('util');
+    expect(zoneOf(0.9)).toBe('inestable');
   });
 
   it('encuentra el tramo continuo más largo dentro del span', () => {
-    expect(longestSpanSegment([0.02, 0.2, 0.3, 0.7, 0.2, 0.3, 0.4, 0.5, 0.02])).toEqual({ start: 4, end: 7 });
-    expect(longestSpanSegment([0.02, 0.7])).toBeNull();
+    expect(longestSpanSegment([0.02, 0.2, 0.3, 0.9, 0.2, 0.3, 0.4, 0.5, 0.02])).toEqual({ start: 4, end: 7 });
+    expect(longestSpanSegment([0.02, 0.9])).toBeNull();
   });
 });

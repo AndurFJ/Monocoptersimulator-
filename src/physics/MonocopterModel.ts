@@ -1,5 +1,8 @@
 /**
- * MonocopterModel — ecuaciones de movimiento del sistema 1-GDL.
+ * MonocopterModel — modelo de primeros principios del sistema 1-GDL (referencia).
+ *
+ * La simulación usa IdentifiedPlant (la planta identificada en el banco); este
+ * modelo se conserva como referencia física y por sus funciones auxiliares de PWM.
  *
  * spec.md §6:
  *   m · ḧ = F_empuje(pwm) − m·g − b·ḣ − F_resorte(h) − F_fricción·sign(ḣ)

@@ -8,8 +8,9 @@
 import { EventBus } from './EventBus';
 import type { TelemetrySample, DataMode, SourceStatus } from '../data/types';
 import type { ControlMode } from '../data/SimulationSource';
-import { DEFAULT_KP, DEFAULT_KI, DEFAULT_KD, H_MAX, PWM_MIN, PWM_MAX } from '../physics/constants';
-import { hoverThrottle } from '../physics/MonocopterModel';
+import {
+  DEFAULT_KP, DEFAULT_KI, DEFAULT_KD, DEFAULT_U0_US, PWM_MIN, PWM_MAX, SETPOINT_MIN_M, SETPOINT_MAX_M,
+} from '../physics/constants';
 
 /** Mapa de eventos del sistema */
 export interface AppEvents {
@@ -21,8 +22,10 @@ export interface AppEvents {
   'running-change': boolean;
   /** Cambio en las ganancias PID */
   'pid-change': { kp: number; ki: number; kd: number };
-  /** Cambio en el feedforward u₀ del PID */
+  /** Cambio en el feedforward u₀ del PID [µs] */
   'feedforward-change': number;
+  /** El usuario pidió llevar el carro al setpoint con el PID (botón "Ir" o "Iniciar PID") */
+  'pid-go': void;
   /** Cambio en la altura objetivo */
   'setpoint-change': number;
   /** Cambio entre control PID y PWM manual (modo Simulación) */
@@ -40,11 +43,11 @@ export class AppState {
 
   private _mode: DataMode = 'simulacion';
   private _running = false;
-  private _setpoint = 0.3; // metros — un valor intermedio razonable
+  private _setpoint = 0.3; // metros — dentro del span útil
   private _kp = DEFAULT_KP;
   private _ki = DEFAULT_KI;
   private _kd = DEFAULT_KD;
-  private _feedforward = hoverThrottle();
+  private _feedforward = DEFAULT_U0_US;
   private _controlMode: ControlMode = 'pid';
   private _manualPwm = PWM_MIN;
 
@@ -75,7 +78,8 @@ export class AppState {
   }
 
   setSetpoint(h: number): void {
-    this._setpoint = Math.max(0, Math.min(h, H_MAX));
+    // Mismo rango que el firmware: por debajo está apoyado, por encima salta el failsafe
+    this._setpoint = Math.max(SETPOINT_MIN_M, Math.min(h, SETPOINT_MAX_M));
     this.bus.emit('setpoint-change', this._setpoint);
   }
 
@@ -86,8 +90,9 @@ export class AppState {
     this.bus.emit('pid-change', { kp: this._kp, ki: this._ki, kd: this._kd });
   }
 
+  /** PWM de equilibrio [µs] (mismo rango que acepta el firmware) */
   setFeedforward(u0: number): void {
-    this._feedforward = Math.max(0, Math.min(1, u0));
+    this._feedforward = Math.round(Math.max(1500, Math.min(1900, u0)));
     this.bus.emit('feedforward-change', this._feedforward);
   }
 
@@ -100,6 +105,11 @@ export class AppState {
   setManualPwm(pwm: number): void {
     this._manualPwm = Math.max(PWM_MIN, Math.min(PWM_MAX, pwm));
     this.bus.emit('manual-pwm-change', this._manualPwm);
+  }
+
+  /** Pedir que el PID lleve el carro al setpoint actual */
+  requestPidGo(): void {
+    this.bus.emit('pid-go', undefined);
   }
 
   requestReset(): void {

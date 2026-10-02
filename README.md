@@ -51,4 +51,25 @@ pidTuner   % Plant > Identify New Plant > Import > datos
 
 Cada conexión nueva, **Reiniciar** o cambiar de pestaña de modo empieza una grabación nueva.
 
-Las constantes físicas (`src/physics/constants.ts`) son valores provisionales: ajústalas con datos del banco real.
+Las constantes del banco y de la planta identificada están en `src/physics/constants.ts`.
+
+## 🔌 Firmware (Arduino Uno y ESP32)
+
+El firmware vive fuera de este repositorio, en `../04_firmware/` (ver `../04_firmware/PROTOCOLO.md`):
+
+- `arduino_uno/monocoptero_uno/` — banco por USB (modo **Serial**).
+- `esp32/monocoptero_esp32/` — USB + WiFi; sirve este simulador desde LittleFS en
+  `http://monocoptero.local` (modo **WiFi**). Para actualizar la interfaz en la placa:
+  `../04_firmware/esp32/scripts/deploy_frontend.ps1` y luego `pio run -t uploadfs`.
+
+Ambos usan el mismo protocolo, el mismo filtro del HC-SR04 y el mismo PID que la simulación
+(`src/physics/SensorFilter.ts`, `src/physics/PIDController.ts`), y envían la telemetría
+`tiempo_ms,pwm_us,altura_cm,crudo_cm,setpoint_cm` cada 50 ms, también con el motor apagado.
+
+### Simulación = banco
+
+La simulación usa la **planta identificada** (`src/physics/IdentifiedPlant.ts`):
+Gp(s) = 0.4302 e^(−0.1188 s)/(1.5719 s + 1) alrededor de (1762 µs, 13.45 cm), con el carro
+apoyado en la base (≈ 11 cm) por debajo del PWM de despegue y tope a 100 cm. El sensor simulado
+incluye ruido y ecos falsos del travesaño, y el failsafe actúa igual que en el firmware (85 cm).
+Las ganancias del PID están en unidades del banco (µs/cm), así que valen tal cual en el prototipo.
