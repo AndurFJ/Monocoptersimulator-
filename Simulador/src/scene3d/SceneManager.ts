@@ -13,7 +13,7 @@ import * as THREE from 'three';
 import { RigBuilder } from './RigBuilder';
 import type { RigParts } from './RigBuilder';
 import { CameraRig } from './CameraRig';
-import { matFloor, matPropeller, matPropellerBlur } from './materials';
+import { matFloor, matPropeller, matPropellerBlur, matSetpoint, matSetpointPlane } from './materials';
 import {
   SPRING_NATURAL_LENGTH_M, SPRING_ENGAGE_HEIGHT_M, MOTOR_TIME_CONSTANT_S,
   H_MIN, H_MAX,
@@ -46,6 +46,11 @@ const MAX_VISUAL_SPIN = 32;
 /** Amplitud máxima de la vibración del carro a plena potencia [m] */
 const VIBRATION_AMPLITUDE = 0.0006;
 
+/** Colores de la marca del setpoint: ámbar normal, azul cuando la mueve el teléfono */
+const SETPOINT_COLOR = new THREE.Color(0xfbbf24);
+const REMOTE_COLOR = new THREE.Color(0x4f8cff);
+const SETPOINT_PLANE_OPACITY = matSetpointPlane.opacity;
+
 function smoothstep(edge0: number, edge1: number, x: number): number {
   const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
   return t * t * (3 - 2 * t);
@@ -70,6 +75,9 @@ export class SceneManager {
   /** Velocidad del rotor mostrada ∈ [0,1] (sigue al PWM con la inercia del motor) */
   private rotorSpeed = 0;
   private setpointShown: number | null = null;
+  /** El teléfono está moviendo el setpoint: la marca brilla en azul */
+  private remoteHighlight = false;
+  private highlightPhase = 0;
 
   constructor(container: HTMLElement) {
     // ── Renderer ──────────────────────────────────────────────
@@ -192,6 +200,18 @@ export class SceneManager {
     setSetpointLabel(`${(sp * 100).toFixed(1)} cm`);
   }
 
+  /** Hacer brillar la marca del setpoint mientras el teléfono la mueve */
+  setRemoteHighlight(on: boolean): void {
+    if (on === this.remoteHighlight) return;
+    this.remoteHighlight = on;
+    this.highlightPhase = 0;
+    if (!on) {
+      matSetpoint.color.copy(SETPOINT_COLOR);
+      matSetpointPlane.color.copy(SETPOINT_COLOR);
+      matSetpointPlane.opacity = SETPOINT_PLANE_OPACITY;
+    }
+  }
+
   /** Mover el carro a una altura sin suavizado (p.ej. tras un reset) */
   snapTo(height: number, pwm = 0): void {
     this.setTelemetry(height, pwm);
@@ -260,6 +280,14 @@ export class SceneManager {
 
     this.follow(dt);
     this.update(this.shownHeight, this.targetPwm, dt);
+    if (this.remoteHighlight) {
+      // Pulso entre el ámbar del setpoint y el azul del control remoto (~1.4 Hz)
+      this.highlightPhase += dt * Math.PI * 2 * 1.4;
+      const k = 0.5 + 0.5 * Math.sin(this.highlightPhase);
+      matSetpoint.color.lerpColors(SETPOINT_COLOR, REMOTE_COLOR, k);
+      matSetpointPlane.color.lerpColors(SETPOINT_COLOR, REMOTE_COLOR, k);
+      matSetpointPlane.opacity = SETPOINT_PLANE_OPACITY + 0.22 * k;
+    }
 
     this.cameraRig.update();
     this.renderer.render(this.scene, this.cameraRig.camera);

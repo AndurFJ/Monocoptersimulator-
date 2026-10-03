@@ -1,0 +1,54 @@
+/*
+ * tokens.css — paleta, tipografía y medidas compartidas por el simulador
+ * (main.css) y el mando del teléfono (phone.css): las dos páginas se ven iguales.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* Paleta oscura — laboratorio/ingeniería */
+  --bg-primary: #0f1117;
+  --bg-secondary: #161923;
+  --bg-panel: #1c1f2c;
+  --bg-panel-hover: #252940;
+  --bg-input: #11131b;
+  --border-color: #2a2e3e;
+  --border-accent: #3d4260;
+
+  /* Texto (muted ≥ 4.5:1 sobre --bg-panel) */
+  --text-primary: #e8eaf0;
+  --text-secondary: #a4a8b8;
+  --text-muted: #8a8fa3;
+
+  /* Acentos */
+  --accent-primary: #4f8cff;
+  --accent-primary-hover: #6a9dff;
+  --accent-success: #34d399;
+  --accent-warning: #fbbf24;
+  --accent-danger: #f87171;
+  --accent-orange: #ff6b35;
+
+  /* Tipografía */
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  --font-sans: 'Inter', 'Segoe UI', system-ui, sans-serif;
+
+  /* Espaciado */
+  --gap-xs: 4px;
+  --gap-sm: 8px;
+  --gap-md: 16px;
+  --gap-lg: 24px;
+
+  /* Radios */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+
+  /* Sombras */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
+
+  /* Layout */
+  --sidebar-width: 360px;
+  --charts-height: clamp(180px, 30vh, 280px);
+}

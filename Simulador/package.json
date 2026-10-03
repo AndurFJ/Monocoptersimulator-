@@ -5,18 +5,22 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "remoto": "vite --host",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run"
   },
   "devDependencies": {
     "@types/three": "^0.186.0",
+    "@types/ws": "^8.18.2",
     "typescript": "~6.0.2",
     "vite": "^8.3.0",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.11",
+    "ws": "^8.22.0"
   },
   "dependencies": {
     "animejs": "^4.5.0",
+    "qrcode-generator": "^2.0.4",
     "three": "^0.186.0",
     "uplot": "^1.6.32",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"

@@ -47,7 +47,14 @@ export class Hud {
         <span class="status-pill" data-hud="status"><span class="status-dot"></span><span data-hud="status-text">Pausado</span></span>
         <span class="hud-time" data-hud="time">0.0 s</span>
       </div>
-      <div class="hud-mode" data-hud="mode">—</div>
+      <div class="hud-mode-row">
+        <span class="hud-mode" data-hud="mode">—</span>
+        <span class="hud-phones" data-hud="phones" title="Teléfonos conectados al control remoto" hidden></span>
+      </div>
+      <div class="hud-remote" data-hud="remote" role="status" hidden>
+        <span class="hud-remote-who" data-hud="remote-who"></span>
+        <span class="hud-remote-text" data-hud="remote-text"></span>
+      </div>
 
       <div class="hud-label hud-label-row">Altura · sensor <span class="zone-tag" data-hud="zone" hidden></span></div>
       <div class="hud-big"><span data-hud="height">—</span><small>cm</small></div>
@@ -95,6 +102,24 @@ export class Hud {
     this.status = status;
     this.el.status.dataset.state = status;
     this.el['status-text'].textContent = STATUS_LABELS[status];
+  }
+
+  /** Chip «📱 iPhone · ajustando el setpoint → 35 cm» (null = ocultar) */
+  setRemote(a: { who: string; text: string; holding: boolean } | null): void {
+    const chip = this.el.remote;
+    const wasHidden = chip.hidden;
+    chip.hidden = a === null;
+    if (!a) return;
+    this.el['remote-who'].textContent = `📱 ${a.who}`;
+    this.el['remote-text'].textContent = a.text;
+    chip.classList.toggle('holding', a.holding);
+    if (wasHidden) flash(chip);
+  }
+
+  /** Número de teléfonos conectados (0 = ocultar el indicador) */
+  setPhones(n: number): void {
+    this.el.phones.hidden = n === 0;
+    this.el.phones.textContent = `📱 ${n}`;
   }
 
   clear(): void {

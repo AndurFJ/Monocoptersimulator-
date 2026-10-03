@@ -9,6 +9,7 @@ Simulador 3D interactivo y plataforma de prueba para Monocóptero de 1 Grado de 
 - **Instrumentación**: Gráficas en tiempo real con uPlot y HUD con telemetría en vivo.
 - **Reproducción**: Carga de ensayos reales desde Excel/CSV (columnas y unidades detectadas automáticamente).
 - **Serial en vivo**: Lectura directa del microcontrolador con Web Serial (Chrome/Edge).
+- **Mando desde el teléfono**: setpoint, AUTO/MANUAL, PWM, secuencia P2 y parada, sincronizado con la página del PC.
 
 ## 🛠️ Tecnologías
 - **Vite + TypeScript**
@@ -21,7 +22,8 @@ Simulador 3D interactivo y plataforma de prueba para Monocóptero de 1 Grado de 
 ## 💻 Ejecución local
 ```bash
 npm install
-npm run dev     # servidor de desarrollo
+npm run dev     # servidor de desarrollo (solo este PC)
+npm run remoto  # igual, pero accesible desde el teléfono (mando remoto)
 npm test        # tests
 npm run build   # build de producción en dist/
 ```
@@ -33,6 +35,29 @@ npm run build   # build de producción en dist/
   (p.ej. `Tiempo (ms)`, `Distancia (cm)`, `PWM`). Si la unidad de altura se detecta mal, fórzala en el selector.
 - **Serial**: indica los baudios y el orden de columnas de cada línea (p.ej. `t, altura, pwm`).
   También se aceptan líneas con etiquetas: `h:12.3,pwm:1500`.
+
+### 📱 Mando remoto desde el teléfono
+
+1. En el PC: `npm run remoto` (la primera vez Windows pregunta por el firewall de Node.js: **Permitir**).
+2. En el simulador, abre la tarjeta **Control remoto** del panel lateral.
+3. Con el teléfono en la **misma red WiFi** (o con el PC conectado al punto de acceso del teléfono),
+   escanea el código QR con la cámara. Si escribes la dirección a mano, el teléfono pide el PIN de 4 cifras.
+
+Cómo se mantienen sincronizados: la página del PC es la única dueña del estado. El teléfono solo manda
+órdenes ("setpoint = 35 cm") y la página las aplica con los mismos controles del panel lateral, así que
+pasan por los mismos límites y el mismo envío a la placa. El teléfono dibuja lo que la página publica
+(10 veces por segundo) y, mientras arrastras, muestra tu valor hasta que el PC lo confirma.
+
+- **Lo que se ve en el PC**: el control que mueve el teléfono se ilumina con la etiqueta «📱 nombre»,
+  el HUD muestra qué está haciendo y la marca del setpoint brilla en azul en la vista 3D.
+- **Lo que se ve en el teléfono**: torre con el carro en la altura medida, marca del setpoint (se arrastra),
+  zona de alarma > 80 cm, tendencia de 30 s, latencia del enlace y «🖥 PC» cuando algo cambió desde el PC.
+- **Seguridad**: si el teléfono se desconecta, el lazo sigue con el último setpoint. La **PARADA** funciona
+  siempre, aunque el teléfono sea «solo ver». Solo un teléfono tiene el mando; los demás pueden tomarlo.
+  Para mover el setpoint o el PWM hay que agarrar la marca o el círculo: un toque suelto no salta de valor.
+- La página del teléfono es `control.html`; el puente WebSocket (`/remote`) es un plugin de Vite
+  (`server/remoteBridge.ts`), así que funciona con `npm run dev`, `npm run remoto` y `npm run preview`,
+  pero **no** cuando la interfaz la sirve la ESP32.
 
 ### 📈 Exportar a PID Tuner (MATLAB)
 Mientras la simulación o la conexión serial está en marcha se graba todo lo recibido. El botón

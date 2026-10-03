@@ -1,0 +1,195 @@
+% =====================================================================
+% Informe IEEE — Etapa 2 · Control PID del monóptero · Control Análogo · Universidad del Magdalena
+% Compilar con pdfLaTeX (Overleaf: subir este archivo + carpeta figuras/)
+% Las marcas [COMPLETAR] indican datos que solo el grupo puede llenar
+% (resultados medidos en el banco con el PID cerrado).
+% =====================================================================
+\documentclass[conference,10pt]{IEEEtran}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish,es-noshorthands]{babel}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{siunitx}
+\usepackage{cite}
+\usepackage{url}
+\sisetup{output-decimal-marker={.}}
+\graphicspath{{figuras/}}
+
+\begin{document}
+
+\title{Diseño e Implementación de un Controlador PID Discreto\\ con Anti-\textit{windup} para el Monóptero de 1 GDL\\ a partir del Modelo FOPDT Identificado}
+
+\author{
+\IEEEauthorblockN{Nayarit Ramirez, Andru Fonseca}
+\IEEEauthorblockA{Programa de Ingeniería Electrónica, Facultad de Ingeniería\\
+Universidad del Magdalena, Santa Marta, Colombia\\
+Control Análogo — Docente: Ing. Jordan Dallan Guillot Fula, PhD (c)\\
+\{[COMPLETAR: correos]\}@unimagdalena.edu.co}
+}
+
+\maketitle
+
+\begin{abstract}
+Se describe el diseño, la sintonía y la implementación de un controlador PID discreto para regular la altura de un monóptero (\textit{tower copter}) de un grado de libertad. La planta se modeló como un sistema de primer orden con tiempo muerto, $G_p(s)=0.4302\,e^{-0.1188s}/(1.5719s+1)$ [cm/\si{\micro\second}], y el PID se sintonizó con la regla SIMC ($\tau_c=\SI{0.8}{s}$), obteniendo $K_p=\SI{4.0}{\micro\second/cm}$, $K_i=\SI{2.5}{\micro\second/(cm\,s)}$ y $K_d=\SI{0.3}{\micro\second\,s/cm}$. El algoritmo incorpora precarga (\textit{feedforward}) del PWM de equilibrio, derivada sobre la medida con filtro de primer orden, anti-\textit{windup} por condicionamiento e integral acotada, además de un filtro de mediana y rechazo de saltos para el sensor ultrasónico y un \textit{failsafe} a \SI{85}{cm}. El mismo código corre en un simulador web y en el firmware de la ESP32 con muestreo de \SI{50}{ms}. En simulación sobre el modelo identificado, con ruido y ecos espurios, se obtiene un sobreimpulso cercano al \SI{2}{\percent} y un tiempo de establecimiento de $\approx\SI{2}{s}$. [COMPLETAR: resultados experimentales en el banco.]
+\end{abstract}
+
+\begin{IEEEkeywords}
+PID discreto, SIMC, anti-\textit{windup}, monóptero, tower copter, FOPDT, HC-SR04, ESP32.
+\end{IEEEkeywords}
+
+% ---------------------------------------------------------------------
+\section{Introducción}
+En la Etapa~1 se identificó la dinámica del monóptero alrededor de un punto de sustentación mediante el método Fit~3 de Smith y Corripio~\cite{smith}. Esta Etapa~2 aprovecha ese modelo para sintonizar de forma analítica un controlador PID que lleve el carro a una altura de referencia y la mantenga frente a ruido de medición y perturbaciones.
+
+El objetivo es doble: (i) obtener ganancias a partir del modelo, sin ensayo y error, y (ii) implementar el algoritmo de modo que se comporte bien con las limitaciones reales del banco: saturación del ESC, zona muerta cerca de la base, ruido y ecos espurios del ultrasonido, y un periodo de muestreo fijo de \SI{50}{ms}.
+
+% ---------------------------------------------------------------------
+\section{Planta y estrategia de control}
+
+\subsection{Modelo de la planta}
+Alrededor de $(u_0,y_0)=(\SI{1762}{\micro\second},\SI{13.45}{cm})$ la planta se aproxima por
+\begin{equation}
+G_p(s)=\frac{\Delta Y(s)}{\Delta U(s)}=\frac{K\,e^{-t_0 s}}{\tau s+1},
+\label{eq:planta}
+\end{equation}
+con $K=\SI{0.4302}{cm/\micro\second}$, $\tau=\SI{1.5719}{s}$ y $t_0=\SI{0.1188}{s}$. La razón $t_0/\tau=0.076$ indica una planta dominada por un polo, fácil de controlar. La entrada es el ancho de pulso $u$ enviado al ESC y la salida la altura $y$ medida con un HC-SR04.
+
+\subsection{Estructura del lazo}
+El lazo (Fig.~\ref{fig:lazo}) compara la referencia $r$ con la altura filtrada $\hat y$ y calcula el comando
+\begin{equation}
+u[k]=\operatorname{sat}\bigl(u_0 + P[k] + I[k] + D[k]\bigr),
+\label{eq:u}
+\end{equation}
+donde $u_0$ es el PWM de equilibrio (precarga) y el PID solo corrige las desviaciones respecto al punto de operación. La saturación acota $u\in[1550,\,1950]\,\si{\micro\second}$ para proteger el motor y el ESC.
+
+\begin{figure}[t]
+\centering
+\fbox{\parbox{0.9\columnwidth}{\centering\small
+$r \rightarrow (\sum) \rightarrow e \rightarrow$ PID $\rightarrow (+u_0) \rightarrow$ sat $\rightarrow$ ESC+motor $\rightarrow$ carro $\rightarrow y$\\
+$y \rightarrow$ HC-SR04 $\rightarrow$ mediana 3 + rechazo de saltos $\rightarrow \hat y \rightarrow (-)$}}
+\caption{Diagrama de bloques simplificado del lazo cerrado. [COMPLETAR: reemplazar por diagrama de bloques dibujado.]}
+\label{fig:lazo}
+\end{figure}
+
+% ---------------------------------------------------------------------
+\section{Algoritmo PID implementado}
+Con periodo $T_s=\SI{50}{ms}$ y error $e[k]=r-\hat y[k]$ (en cm), los términos son:
+
+\subsection{Proporcional}
+\begin{equation}
+P[k]=K_p\,e[k].
+\end{equation}
+Reacciona de inmediato al error: cuanto más lejos está el carro de la referencia, más corrige. Con $K_p=\SI{4}{\micro\second/cm}$, un error de \SI{10}{cm} aporta \SI{40}{\micro\second} al PWM.
+
+\subsection{Integral con anti-\textit{windup}}
+\begin{equation}
+I[k]=\operatorname{clip}\bigl(I[k-1]+K_i\,e[k]\,T_s,\;-I_{max},\,I_{max}\bigr),
+\end{equation}
+con $I_{max}=\SI{250}{\micro\second}$. Acumula el error en el tiempo y elimina el error en régimen permanente, lo que compensa que $u_0$ no sea exactamente el equilibrio real (cambia con la batería, la fricción de las guías o el efecto techo). La integración se \textit{congela} cuando la salida ya está saturada y el error empuja hacia la saturación:
+\begin{equation}
+\text{si}\;\bigl(u_{sin\,sat}\ge u_{max}\land e>0\bigr)\;\lor\;\bigl(u_{sin\,sat}\le u_{min}\land e<0\bigr)\;\Rightarrow\; I[k]=I[k-1].
+\end{equation}
+Este anti-\textit{windup} por condicionamiento evita que la integral crezca mientras el actuador no puede responder, lo que de otro modo produciría un sobreimpulso grande al salir de la saturación.
+
+\subsection{Derivativo sobre la medida, filtrado}
+En lugar de derivar el error se deriva la medida:
+\begin{align}
+\dot{\hat y}[k]&=\frac{\hat y[k]-\hat y[k-1]}{T_s},\\
+\bar{\dot y}[k]&=\bar{\dot y}[k-1]+\alpha\bigl(\dot{\hat y}[k]-\bar{\dot y}[k-1]\bigr),\\
+D[k]&=-K_d\,\bar{\dot y}[k],
+\end{align}
+con $\alpha=0.3$ y $K_d=\SI{0.3}{\micro\second\,s/cm}$. Derivar la medida evita el \textit{derivative kick}: un escalón en la referencia no produce un pico en $D$. El filtro de primer orden ($\alpha=0.3$, equivale a una constante de tiempo de $\approx\SI{0.12}{s}$) atenúa el ruido del ultrasonido, que se amplificaría al derivar. El término $D$ actúa como amortiguamiento: se opone a la velocidad del carro y reduce el sobreimpulso.
+
+\subsection{Resumen}
+Cada $T_s$, el firmware ejecuta: lectura del sensor $\rightarrow$ filtrado $\rightarrow$ cálculo de $e$, $P$, $D$ $\rightarrow$ actualización condicional de $I$ $\rightarrow$ saturación $\rightarrow$ escritura del pulso al ESC. La primera muestra tras activar el PID usa derivada nula y la integral parte de cero (\texttt{reiniciarPID}). Cambiar las ganancias en línea conserva la integral, para que no haya saltos en el PWM.
+
+% ---------------------------------------------------------------------
+\section{Sintonía}
+Con la regla SIMC~\cite{skogestad} para un modelo FOPDT y $\tau_c=\SI{0.8}{s}$:
+\begin{align}
+K_p&=\frac{\tau}{K(\tau_c+t_0)}=\frac{1.5719}{0.4302\,(0.8+0.1188)}=\SI{3.98}{\micro\second/cm},\\
+T_i&=\min\{\tau,\,4(\tau_c+t_0)\}=\SI{1.57}{s},\\
+K_i&=\frac{K_p}{T_i}\approx\SI{2.5}{\micro\second/(cm\,s)}.
+\end{align}
+Se redondeó $K_p\approx4.0$. La constante $\tau_c$ es el parámetro de compromiso: valores menores dan respuesta más rápida pero menos margen y más sensibilidad al ruido. El valor $\tau_c=\SI{0.8}{s}$ es aproximadamente la mitad de $\tau$, es decir, un lazo cerrado unas dos veces más rápido que la planta. Se añadió $K_d=\SI{0.3}{\micro\second\,s/cm}$, pequeño, solo para amortiguar.
+
+\begin{table}[t]
+\caption{Parámetros del controlador}
+\label{tab:params}
+\centering
+\begin{tabular}{lcc}
+\toprule
+Parámetro & Valor & Unidad \\
+\midrule
+$K_p$ & 4.0 & \si{\micro\second/cm} \\
+$K_i$ & 2.5 & \si{\micro\second/(cm\,s)} \\
+$K_d$ & 0.3 & \si{\micro\second\,s/cm} \\
+$T_s$ & 50 & \si{ms} \\
+$u_{min},\,u_{max}$ & 1550, 1950 & \si{\micro\second} \\
+$I_{max}$ & 250 & \si{\micro\second} \\
+$\alpha$ (filtro D) & 0.3 & -- \\
+Referencia admisible & 12--80 & \si{cm} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ---------------------------------------------------------------------
+\section{Acondicionamiento de la medida y seguridad}
+El HC-SR04 produce lecturas espurias (ecos del travesaño superior, pérdidas de eco), de modo que el lazo no usa la lectura cruda sino una versión filtrada:
+\begin{itemize}
+\item \textbf{Mediana de 3 muestras}, que elimina valores aislados.
+\item \textbf{Rechazo de saltos}: una lectura que difiere más de \SI{12}{cm} de la altura vigente se descarta; solo se acepta un salto real si 3 lecturas consecutivas son coherentes (dispersión $\leq\SI{5}{cm}$).
+\item \textbf{Pérdida de eco}: con el motor apagado y sin eco, se asume que el carro está en la base ($\approx\SI{11}{cm}$).
+\end{itemize}
+Como protección, el \textit{failsafe} apaga el motor si la altura supera \SI{85}{cm} durante 3 muestras seguidas, o si el sensor no entrega lectura durante 20 muestras con el PID activo. La referencia se limita a \SIrange{12}{80}{cm}, fuera de la zona muerta de la base y de la zona inestable cercana al travesaño.
+
+% ---------------------------------------------------------------------
+\section{Implementación}
+El algoritmo se implementó dos veces con las mismas ecuaciones y unidades: en TypeScript (simulador web, \texttt{PIDController.ts}) y en C++ para la ESP32 (\texttt{calcularPID()}). Así, lo que se prueba en el simulador es lo que corre en el banco. El simulador usa la planta identificada~\eqref{eq:planta} con ruido gaussiano de \SI{0.4}{cm}, ecos del travesaño (3\,\%) y pérdidas de eco (1\,\%); el firmware ofrece un \texttt{MODO\_SIMULADO} con la misma planta para probar el lazo sin mover el motor. El ESP32 sirve el simulador por WiFi y transmite telemetría a \SI{20}{Hz} por WebSocket y USB.
+
+% ---------------------------------------------------------------------
+\section{Resultados}
+
+\subsection{Simulación}
+Con las ganancias de la Tabla~\ref{tab:params} sobre el modelo identificado, incluyendo ruido y ecos espurios, un escalón de referencia produce un sobreimpulso cercano al \SI{2}{\percent} y un tiempo de establecimiento de $\approx\SI{2}{s}$, sin error en régimen permanente gracias a la acción integral. [COMPLETAR: insertar figura de la respuesta simulada, exportada desde el simulador.]
+
+\subsection{Banco experimental}
+[COMPLETAR: respuesta en lazo cerrado en el banco (referencias de 20, 30 y 40 cm): sobreimpulso, tiempo de establecimiento, error en régimen permanente y comparación con la simulación. Figura de altura, referencia y PWM.]
+
+% ---------------------------------------------------------------------
+\section{Discusión}
+\begin{itemize}
+\item \textbf{Validez del modelo.} El modelo se identificó cerca de \SI{13}{cm}; la planta real es no lineal (empuje $\propto u^2$, efecto techo, zona muerta). El término integral y la precarga $u_0$ absorben parte del desajuste, pero el desempeño puede degradarse lejos del punto de operación.
+\item \textbf{Cambio del punto de operación.} En ensayos posteriores del banco el carro despegó desde la base cerca de \SI{1895}{\micro\second} (fricción estática en las guías) y flotó a $\approx\SI{20}{cm}$ con $\approx\SI{1840}{\micro\second}$, bastante por encima de \SI{1762}{\micro\second}. Si $u_0$ no coincide con el equilibrio, la integral debe compensar la diferencia, lo que alarga el transitorio. [COMPLETAR: $u_0$ final usado.]
+\item \textbf{Tiempo muerto y muestreo.} $T_s=\SI{50}{ms}$ es unas 24 veces menor que $\tau$, por lo que la discretización tiene efecto despreciable; el tiempo muerto de \SI{0.12}{s} equivale a unas 2 muestras.
+\item \textbf{Ajuste fino.} Si el carro oscila, bajar $K_p$ y $K_i$; si es lento, subirlos. Las ganancias pueden cambiarse en línea desde la interfaz.
+\end{itemize}
+
+% ---------------------------------------------------------------------
+\section{Conclusiones}
+\begin{itemize}
+\item Se diseñó un PID discreto con precarga, derivada sobre la medida filtrada y anti-\textit{windup}, sintonizado analíticamente con SIMC a partir del modelo FOPDT identificado: $K_p=4.0$, $K_i=2.5$, $K_d=0.3$.
+\item El filtrado del sensor y el \textit{failsafe} son necesarios para cerrar el lazo con un ultrasonido ruidoso.
+\item Compartir el algoritmo entre el simulador y el firmware permite validar la sintonía antes de energizar el motor.
+\item En simulación se espera un sobreimpulso $\approx\SI{2}{\percent}$ y $t_s\approx\SI{2}{s}$. [COMPLETAR: contrastar con el banco.]
+\end{itemize}
+
+\begin{thebibliography}{9}
+\bibitem{smith} C. A. Smith y A. B. Corripio, \textit{Principles and Practice of Automatic Process Control}, 3.\textsuperscript{a} ed. Hoboken, NJ, EE.~UU.: Wiley, 2006.
+\bibitem{skogestad} S. Skogestad, ``Simple analytic rules for model reduction and PID controller tuning,'' \textit{J. Process Control}, vol.~13, no.~4, pp.~291--309, 2003.
+\bibitem{ogata} K. Ogata, \textit{Ingeniería de Control Moderna}, 5.\textsuperscript{a} ed. Madrid, España: Pearson, 2010.
+\bibitem{astrom} K. J. Åström y T. Hägglund, \textit{Advanced PID Control}. Research Triangle Park, NC, EE.~UU.: ISA, 2006.
+\end{thebibliography}
+
+% ---------------------------------------------------------------------
+\appendices
+\section{Archivos del proyecto}
+\begin{itemize}
+\item Simulador: \texttt{Simulador/src/physics/PIDController.ts}, \texttt{constants.ts}.
+\item Firmware: \texttt{04\_firmware/esp32/monocoptero\_esp32} y \texttt{04\_firmware/arduino\_uno}.
+\item Informe de la Etapa~1: \texttt{05\_informe\_ieee/informe\_ieee.tex}.
+\end{itemize}
+
+\end{document}

@@ -23,6 +23,9 @@ import {
   STEP_TEST_U0_US, STEP_TEST_DELTA_US, STEP_TEST_PRE_S, STEP_TEST_TOTAL_S,
 } from '../physics/constants';
 import { zoneOf } from '../physics/zones';
+import { P2_STEPS_CM, P2_SEGMENT_S } from '../core/SetpointProfile';
+import type { ProfileView } from '../remote/protocol';
+import type { RemoteActivity } from '../remote/RemoteHost';
 import { fadeIn, pulse } from './animations';
 
 export interface ParamsPanelDeps {
@@ -38,6 +41,8 @@ export interface ParamsPanelDeps {
   onStepTest: (u0: number) => void;
   /** Cancelar el ensayo automático (apaga el motor) */
   onStepTestCancel: () => void;
+  /** Iniciar o cancelar la secuencia de setpoints P2 */
+  onProfile: (on: boolean) => void;
 }
 
 export interface StepTestView {
@@ -104,6 +109,7 @@ export class ParamsPanel {
   private stopPulse: (() => void) | null = null;
   private stopWifiPulse: (() => void) | null = null;
   private stepTestActive = false;
+  private profileActive = false;
   private readonly deps: ParamsPanelDeps;
 
   constructor(container: HTMLElement, deps: ParamsPanelDeps) {
@@ -148,24 +154,27 @@ export class ParamsPanel {
         </div>
 
         <div class="transport">
-          <button class="btn btn-primary" data-action="toggle-run" title="Espacio">▶ Iniciar</button>
+          <button class="btn btn-primary" data-action="toggle-run" data-remote="run" title="Espacio">▶ Iniciar</button>
           <button class="btn btn-icon" data-action="reset" title="Reiniciar (R)" aria-label="Reiniciar">⟲</button>
         </div>
       </header>
 
       <div class="sidebar-body">
+        <!-- Control remoto desde el teléfono (RemotePanel) -->
+        <div data-slot="remote"></div>
+
         <!-- ── Control de Altura y Parámetros (Simulación, Serial y WiFi) ── -->
         <section class="mode-section" data-section="simulacion,wifi,serial">
           <div class="card">
             <div class="card-head">
               <h2 class="card-title" data-out="control-title">Altura objetivo</h2>
-              <div class="segmented segmented-xs" aria-label="Tipo de control">
+              <div class="segmented segmented-xs" aria-label="Tipo de control" data-remote="control">
                 <button data-control="pid" title="El PID decide la potencia">PID</button>
                 <button data-control="manual" title="Tú decides la potencia">Manual</button>
               </div>
             </div>
 
-            <div data-only="pid" class="stack">
+            <div data-only="pid" class="stack" data-remote="setpoint">
               <form class="setpoint-form" data-form="setpoint">
                 <div class="input-unit input-big">
                   <input id="setpoint-cm" type="number" data-input="setpoint-cm" min="0" max="${hMaxCm}" step="0.5"
@@ -190,9 +199,19 @@ export class ParamsPanel {
               <div class="presets" aria-label="Alturas rápidas">
                 ${SETPOINT_PRESETS_CM.map((cm) => `<button type="button" class="chip" data-preset="${cm}">${cm}</button>`).join('')}
               </div>
+              <div class="profile" data-remote="profile">
+                <div class="profile-head">
+                  <button type="button" class="btn btn-sm btn-profile" data-action="profile"
+                    title="Prueba P2 de la guía: el setpoint recorre la secuencia solo">▶ Secuencia P2</button>
+                  <span class="profile-label mono">${P2_STEPS_CM.join('→')} cm · ${P2_SEGMENT_S} s</span>
+                </div>
+                <div class="profile-track" data-out="profile-track" hidden>
+                  ${P2_STEPS_CM.map((cm, i) => `<span class="profile-seg" data-seg="${i}"><i></i><b>${cm}</b></span>`).join('')}
+                </div>
+              </div>
             </div>
 
-            <div data-only="manual" class="stack">
+            <div data-only="manual" class="stack" data-remote="pwm">
               <div class="big-readout"><output data-out="manual-pwm">${s.manualPwm}</output><span>µs</span></div>
               <div class="range-wrap range-pwm">
                 <input type="range" data-input="manual-pwm" data-format="us" min="${PWM_MIN}" max="${PWM_MAX}" step="5" value="${s.manualPwm}"
@@ -235,14 +254,18 @@ export class ParamsPanel {
             <p class="hint">Unidades del banco: K<sub>p</sub> [µs/cm], K<sub>i</sub> [µs/(cm·s)], K<sub>d</sub> [µs·s/cm], u₀ [µs] —
               las mismas del firmware, así que lo que pruebes aquí vale en el prototipo.
               Por defecto: sintonía SIMC sobre G<sub>p</sub>(s) = 0.4302 e<sup>−0.1188s</sup>/(1.5719s+1).</p>
-            <button type="button" class="btn btn-ghost btn-sm" data-action="reset-gains">Restaurar valores</button>
+            <div class="gains-actions">
+              <button type="button" class="btn btn-ghost btn-sm" data-action="reset-gains">Restaurar valores</button>
+              <a class="btn btn-ghost btn-sm" href="./diseno.html" target="_blank" rel="noopener"
+                title="Tres puntos, Ziegler–Nichols, Lambda, regla del grupo y gemelo digital">📐 Calcular con Diseño</a>
+            </div>
           </details>
         </section>
 
         <!-- ── Control en vivo del prototipo (Serial USB y WiFi, sincronizado) ── -->
         <section class="mode-section" data-section="serial,wifi">
           <!-- Parada de emergencia: siempre a la vista, primero -->
-          <div class="card card-ems">
+          <div class="card card-ems" data-remote="stop">
             <button type="button" class="btn btn-ems" data-action="live-emergency" disabled>
               <span class="ems-icon" aria-hidden="true">⏻</span> PARADA DE EMERGENCIA
             </button>
@@ -250,7 +273,7 @@ export class ParamsPanel {
           </div>
 
           <!-- Aviso de failsafe del firmware -->
-          <div class="card card-failsafe" data-out="failsafe-banner" hidden>
+          <div class="card card-failsafe" data-out="failsafe-banner" data-remote="rearm" hidden>
             <div class="failsafe-title">⚠ FAILSAFE ACTIVADO</div>
             <p class="hint">El firmware cortó el motor por altura excesiva. Revisa el banco antes de continuar.</p>
             <button type="button" class="btn btn-warning" data-action="live-rearm" disabled>Rearmar (reconocer)</button>
@@ -451,7 +474,8 @@ export class ParamsPanel {
       </div>
 
       <footer class="sidebar-footer">
-        <kbd>Espacio</kbd> iniciar/pausar · <kbd>R</kbd> reiniciar
+        <kbd>Espacio</kbd> iniciar/pausar · <kbd>R</kbd> reiniciar ·
+        <a href="./diseno.html" target="_blank" rel="noopener">📐 Diseño del PID</a>
       </footer>
     `;
   }
@@ -498,6 +522,7 @@ export class ParamsPanel {
     this.root.querySelectorAll<HTMLButtonElement>('[data-preset]').forEach((btn) => {
       btn.addEventListener('click', () => goTo(Number(btn.dataset.preset)));
     });
+    this.q('[data-action="profile"]').addEventListener('click', () => this.deps.onProfile(!this.profileActive));
 
     const manual = this.q<HTMLInputElement>('[data-input="manual-pwm"]');
     manual.addEventListener('input', () => st.setManualPwm(Number(manual.value)));
@@ -690,6 +715,11 @@ export class ParamsPanel {
     });
     st.bus.on('manual-pwm-change', (v) => {
       this.q('[data-out="manual-pwm"]').textContent = String(Math.round(v));
+      // También el deslizador: el PWM puede venir del teléfono (sin pisar un arrastre local)
+      if (document.activeElement !== manual) {
+        manual.value = String(v);
+        syncRange(manual);
+      }
     });
   }
 
@@ -938,6 +968,41 @@ export class ParamsPanel {
     this.q('[data-out="live-height"]').textContent = `${fmt(heightM * 100, 1)} cm`;
     this.q('[data-out="live-raw"]').textContent = rawM === undefined ? 'sin eco' : `${fmt(rawM * 100, 1)} cm`;
     this.q('[data-out="live-pwm"]').textContent = `${Math.round(pwmUs)} µs`;
+  }
+
+  /** Contenedor de la tarjeta del control remoto */
+  get remoteSlot(): HTMLElement {
+    return this.q('[data-slot="remote"]');
+  }
+
+  /**
+   * Resaltar el control que está moviendo el teléfono (null = ninguno).
+   * Si ese control no está a la vista (p.ej. otro modo), lo cuenta el chip del HUD.
+   */
+  showRemoteActivity(a: RemoteActivity | null): void {
+    this.root.querySelectorAll<HTMLElement>('[data-remote]').forEach((el) => {
+      const on = a !== null && el.dataset.remote === a.field;
+      el.classList.toggle('remote-active', on);
+      el.classList.toggle('remote-holding', on && a.holding);
+      if (on) el.dataset.remoteWho = `📱 ${a.who}`;
+    });
+  }
+
+  /** Progreso de la secuencia P2 (null = ninguna en curso) */
+  showProfile(view: ProfileView | null): void {
+    this.profileActive = view !== null;
+    const btn = this.q<HTMLButtonElement>('[data-action="profile"]');
+    btn.textContent = view ? '✕ Cancelar P2' : '▶ Secuencia P2';
+    btn.classList.toggle('btn-danger', view !== null);
+    const track = this.q('[data-out="profile-track"]');
+    track.hidden = view === null;
+    if (!view) return;
+    track.querySelectorAll<HTMLElement>('[data-seg]').forEach((seg) => {
+      const i = Number(seg.dataset.seg);
+      const fill = i < view.index ? 1 : i > view.index ? 0 : Math.min(1, view.elapsed / view.segment);
+      seg.style.setProperty('--fill', String(fill));
+      seg.classList.toggle('current', i === view.index);
+    });
   }
 
   /** Progreso de la reproducción ∈ [0,1] */

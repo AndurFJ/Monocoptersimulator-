@@ -26,7 +26,8 @@ Modelo identificado (Fit 3, Smith & Corripio):
 ## Uso rápido
 
 - **MATLAB**: abrir `03_matlab/IdentificacionFIT3.m` y ejecutar (lee `02_datos/` solo). Después `Polosmonocopter.m`, `ValidacionSimulink.m` y `ComparacionEnsayos.m`. Cada script explica qué hace con `help NombreDelScript`.
-- **Simulador**: `cd Simulador && npm install && npm run dev` (abrir en Chrome/Edge para el modo Serial).
+- **Simulador**: `cd Simulador && npm install && npm run dev` (abrir en Chrome/Edge para el modo Serial). Con `npm run remoto` se puede manejar también desde el teléfono (tarjeta *Control remoto*, código QR).
+- **Etapa 2 (segundo orden, PID y SCADA)**: plan de trabajo en `PLAN_ETAPA2.md`.
 - **Firmware**: ver `04_firmware/PROTOCOLO.md`. Para el ESP32, copiar `04_firmware/esp32/config.h.example` como `04_firmware/esp32/monocoptero_esp32/config.h` y poner el nombre y la clave del WiFi (ese archivo no se sube al repositorio).
 - **Informe**: subir `05_informe_ieee/` a Overleaf y compilar `informe_ieee.tex` (pdfLaTeX).
 - **Presentación del Hito 2**: abrir `06_presentacion/presentacion_hito2/index.html` en Chrome o Edge (funciona sin internet). Flechas o clic para avanzar, `F` pantalla completa, `P` pausa el 3D.

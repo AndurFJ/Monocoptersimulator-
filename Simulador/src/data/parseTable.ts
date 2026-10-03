@@ -35,8 +35,9 @@ export interface ParsedTable {
   skipped: number;
 }
 
-const TIME_RE = /^(t|tiempo|time|timestamp|millis|ms|seg|segundos|hora|hour|clock)\b|tiempo|time/i;
-const HEIGHT_RE = /altura|height|distancia|distance|dist|^h\b|^y\b|posici/i;
+// También los nombres del Excel para PID Tuner que exporta el simulador: t_s, y_cm, u_pwm
+const TIME_RE = /^(t|tiempo|time|timestamp|millis|ms|seg|segundos|hora|hour|clock)\b|^t_|tiempo|time/i;
+const HEIGHT_RE = /altura|height|distancia|distance|dist|^h\b|^y\b|^y_|posici/i;
 const PWM_RE = /pwm|throttle|motor|esc|^u\b|acci[oó]n|control|se[nñ]al/i;
 const SETPOINT_RE = /setpoint|^sp\b|referencia|^ref|objetivo|deseada|target/i;
 
@@ -61,9 +62,9 @@ export function toNumber(cell: unknown): number | null {
 /** Unidad de longitud indicada en la cabecera, p.ej. "Altura (cm)" */
 export function unitFromHeader(header: string): LengthUnit | null {
   const h = header.toLowerCase();
-  if (/\bmm\b|mil[ií]metro/.test(h)) return 'mm';
-  if (/\bcm\b|cent[ií]metro/.test(h)) return 'cm';
-  if (/\(m\)|\[m\]|\bmetros?\b/.test(h)) return 'm';
+  if (/(\b|_)mm\b|mil[ií]metro/.test(h)) return 'mm';
+  if (/(\b|_)cm\b|cent[ií]metro/.test(h)) return 'cm';
+  if (/\(m\)|\[m\]|_m\b|\bmetros?\b/.test(h)) return 'm';
   return null;
 }
 

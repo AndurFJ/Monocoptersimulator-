@@ -25,6 +25,10 @@ import { ReplaySource } from './data/ReplaySource';
 import { SerialSource } from './data/SerialSource';
 import { WifiSource } from './data/WifiSource';
 import type { DataMode, DataSource, SourceStatus, EspStatus, TelemetrySample } from './data/types';
+import { SetpointProfile, P2_STEPS_CM, P2_SEGMENT_S } from './core/SetpointProfile';
+import { RemoteHost } from './remote/RemoteHost';
+import { RemotePanel } from './ui/RemotePanel';
+import { PWM_MIN } from './physics/constants';
 
 // ── Construir el layout HTML ────────────────────────────────────
 
@@ -116,6 +120,10 @@ function init(): void {
     },
     onStepTest: (u0) => startStepTest(u0),
     onStepTestCancel: () => cancelStepTest('parada pedida por el usuario.'),
+    onProfile: (on) => {
+      const err = on ? startProfile() : (cancelProfile('la cancelaste.'), null);
+      if (err) appState.reportStatus({ level: 'info', message: err });
+    },
   });
   const refreshRecording = () => params.setRecording({
     count: recorder.count,
@@ -128,6 +136,41 @@ function init(): void {
   const toasts = byId('toasts');
   let stepTest: StepSequence | null = null;
   let lastLive: { s: TelemetrySample; at: number } | null = null;
+
+  // ── Secuencia de setpoints P2 (20 → 40 → 30 → 50 cm, 12 s por tramo) ──
+  const profile = new SetpointProfile();
+  /** true mientras la secuencia mueve el setpoint (no es un cambio a mano) */
+  let applyingProfile = false;
+  const setProfileSetpoint = (cmValue: number): void => {
+    applyingProfile = true;
+    try {
+      appState.setSetpoint(cmValue / 100);
+    } finally {
+      applyingProfile = false;
+    }
+  };
+  const startProfile = (): string | null => {
+    if (appState.mode === 'reproduccion') return 'En Reproducción no hay nada que controlar.';
+    const live = (appState.mode === 'wifi' && wifi.connected) || (appState.mode === 'serial' && serial.connected);
+    if (appState.mode !== 'simulacion' && !live) return 'Conecta primero con el prototipo (🔌 Conectar).';
+    if (failsafeActive) return 'Rearma el failsafe antes de la secuencia.';
+    cancelStepTest('se inició la secuencia P2.', false);
+    setProfileSetpoint(profile.start());
+    appState.requestPidGo();
+    params.showProfile(profile.view());
+    appState.reportStatus({
+      level: 'info',
+      message: `Secuencia P2: ${P2_STEPS_CM.join(' → ')} cm, ${P2_SEGMENT_S} s por tramo.`,
+    });
+    return null;
+  };
+  /** Cancelar la secuencia (sin motivo = en silencio) */
+  const cancelProfile = (reason?: string): void => {
+    if (!profile.active) return;
+    profile.cancel();
+    params.showProfile(null);
+    if (reason) appState.reportStatus({ level: 'warning', message: `Secuencia P2 cancelada: ${reason}` });
+  };
 
   // ── Fuentes → bus ──
   for (const source of Object.values(sources)) {
@@ -152,6 +195,13 @@ function init(): void {
     if (s.failsafe) {
       failsafeActive = true;
       hud.setStatus('failsafe');
+      cancelProfile('saltó el failsafe.');
+    }
+    if (profile.active && appState.mode !== 'reproduccion') {
+      const next = profile.push(s.t);
+      if (next === 'done') appState.reportStatus({ level: 'success', message: 'Secuencia P2 terminada.' });
+      else if (next !== null) setProfileSetpoint(next);
+      params.showProfile(profile.view());
     }
     // En Serial/WiFi el panel refleja la telemetría en vivo del prototipo
     if (appState.mode === 'wifi' || appState.mode === 'serial') {
@@ -220,6 +270,10 @@ function init(): void {
   const recentlyEdited = (key: string) => performance.now() - (localEdit[key] ?? -1e9) < 800;
 
   appState.bus.on('setpoint-change', (v) => {
+    // Mover el setpoint a mano (o desde el teléfono) cancela la secuencia P2
+    if (profile.active && !applyingProfile && Math.abs(v * 100 - (profile.current ?? NaN)) > 0.05) {
+      cancelProfile('cambiaste el setpoint a mano.');
+    }
     simulation.setpoint = v;
     showSimSetpoint();
     touched('setpoint');
@@ -227,7 +281,11 @@ function init(): void {
   });
   appState.bus.on('control-mode-change', (m) => {
     simulation.setControlMode(m);
-    if (m === 'manual') simulation.clearFailsafe();
+    if (m === 'manual') {
+      simulation.clearFailsafe();
+      if (appState.mode === 'simulacion') failsafeActive = false;
+      cancelProfile('pasaste a manual.');
+    }
     showSimSetpoint();
     // Cambiar de pestaña NO arranca el motor del prototipo: el PID se inicia
     // con "Ir ▲" / "Iniciar PID" y el manual al mover el PWM.
@@ -245,6 +303,7 @@ function init(): void {
   appState.bus.on('manual-pwm-change', (v) => {
     simulation.manualPwm = v;
     simulation.clearFailsafe();
+    if (appState.mode === 'simulacion') failsafeActive = false;
     cancelStepTest('moviste el PWM manual.', false);
     sendLiveLatest('pwm', { type: 'cmd', action: 'set_pwm', value: v });
   });
@@ -253,6 +312,7 @@ function init(): void {
     if (appState.controlMode !== 'pid') appState.setControlMode('pid');
     if (appState.mode === 'simulacion') {
       simulation.clearFailsafe();
+      failsafeActive = false;
       if (!appState.running) appState.setRunning(true);
       return;
     }
@@ -292,6 +352,7 @@ function init(): void {
       if (changed('control_mode') && (esp.control_mode === 'pid' || esp.control_mode === 'manual')) {
         appState.setControlMode(esp.control_mode);
       }
+      if (changed('control_mode') && esp.control_mode !== 'pid') cancelProfile('el PID de la placa se detuvo.');
     } finally {
       applyingRemote = false;
     }
@@ -401,6 +462,7 @@ function init(): void {
       if (source === serial) params.setSerialConnected(serial.connected);
     } else {
       cancelStepTest('se cerró la conexión con el prototipo.');
+      if (appState.mode !== 'simulacion') cancelProfile('se cerró la conexión con el prototipo.');
       await source.stop();
       if (source === serial) params.setSerialConnected(false);
       if (source === wifi) params.setWifiConnected(false);
@@ -414,10 +476,14 @@ function init(): void {
     refreshRecording();
   });
 
-  appState.bus.on('reset', () => resetActive());
+  appState.bus.on('reset', () => {
+    cancelProfile();
+    resetActive();
+  });
 
   appState.bus.on('mode-change', async (mode) => {
     cancelStepTest('se cambió de modo.');
+    cancelProfile();
     // Detener todas las fuentes que no sean la nueva
     for (const [m, source] of Object.entries(sources)) {
       if (m !== mode) await source.stop();
@@ -451,7 +517,79 @@ function init(): void {
     if ((e.target as HTMLElement).dataset.input === 'seek') charts.pushMany(replay.samplesUntilNow());
   });
 
-  // Estado inicial
+  // ── Control remoto desde el teléfono ──
+  // El teléfono manda intenciones; RemoteHost las aplica con los mismos setters
+  // del panel y publica el estado. Aquí solo van las acciones que no son un setter.
+  const isLiveConnected = () =>
+    (appState.mode === 'wifi' && wifi.connected) || (appState.mode === 'serial' && serial.connected);
+
+  const emergencyStop = (who: string): void => {
+    cancelProfile();
+    cancelStepTest(`parada desde ${who}.`);
+    if (appState.mode === 'simulacion') {
+      appState.setControlMode('manual');
+      appState.setManualPwm(PWM_MIN);
+    } else {
+      sendLiveNow({ type: 'cmd', action: 'stop' });
+    }
+    appState.reportStatus({ level: 'warning', message: `⏻ PARADA desde ${who}: motor a ${PWM_MIN} µs.` });
+  };
+
+  const rearm = (): void => {
+    if (appState.mode === 'simulacion') {
+      simulation.clearFailsafe();
+      failsafeActive = false;
+      updateHudStatus(lastMetrics?.settled ?? false);
+    } else {
+      sendLiveNow({ type: 'cmd', action: 'clear_failsafe' });
+    }
+  };
+
+  const remote = new RemoteHost(appState, () => ({
+    live: appState.mode === 'simulacion' ? appState.running : isLiveConnected(),
+    engaged: !failsafeActive && (appState.mode === 'simulacion'
+      ? appState.running && appState.controlMode === 'pid'
+      : isLiveConnected() && lastEsp.control_mode === 'pid'),
+    failsafe: failsafeActive,
+    profile: profile.view(),
+  }), {
+    stop: emergencyStop,
+    rearm,
+    profile: (on) => (on ? startProfile() : (cancelProfile('cancelada desde el teléfono.'), null)),
+  });
+  const remotePanel = new RemotePanel(params.remoteSlot);
+  remotePanel.setReclaimHandler(() => remote.reclaim());
+  remote.onBridge((v) => {
+    remotePanel.update(v);
+    hud.setPhones(v.status === 'online' ? v.phones.length : 0);
+  });
+  // Lo que toca el teléfono se ve en la página: control resaltado, chip del HUD y marca 3D
+  remote.onActivity((a) => {
+    params.showRemoteActivity(a);
+    hud.setRemote(a);
+    scene.setRemoteHighlight(a?.field === 'setpoint');
+  });
+  remote.connect();
+
+  // ── Ganancias enviadas desde la página de diseño (diseno.html, en otra pestaña) ──
+  const applyDesignGains = (raw: string | null, maxAgeMs: number): void => {
+    try {
+      const g = JSON.parse(raw ?? 'null') as { kp: number; ki: number; kd: number; rule: string; at: number } | null;
+      if (!g || Date.now() - g.at > maxAgeMs || ![g.kp, g.ki, g.kd].every(Number.isFinite)) return;
+      appState.setPIDGains(g.kp, g.ki, g.kd);
+      appState.reportStatus({
+        level: 'success',
+        message: `Ganancias de ${g.rule} cargadas desde Diseño: Kp ${g.kp.toFixed(2)} · Ki ${g.ki.toFixed(2)} · Kd ${g.kd.toFixed(2)}.`,
+      });
+    } catch { /* dato corrupto o sin almacenamiento */ }
+  };
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'monocoptero-gains') applyDesignGains(e.newValue, 60_000);
+  });
+  // Si se mandaron hace menos de un minuto y el simulador se abrió después
+  try { applyDesignGains(localStorage.getItem('monocoptero-gains'), 60_000); } catch { /* nada */ }
+
+  // Estado inicial (después del control remoto, para que su primera muestra le llegue)
   hud.setMode(appState.mode);
   resetActive();
   scene.snapTo(simulation.model.state.height);
